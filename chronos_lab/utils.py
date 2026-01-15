@@ -1,9 +1,10 @@
 from chronos_lab import logger
-from typing import List, Optional
+from typing import List, Optional, Dict, Union, Literal
+from datetime import datetime
 import pandas as pd
 
 
-def get_seclist_intrinio(*,
+def securities_intrinio(*,
                          api_key=None,
                          composite_mic='USCOMP',
                          codes=None,
@@ -33,14 +34,14 @@ def get_seclist_intrinio(*,
     return securities
 
 
-def save_ohlcv_intrinio(*,
-                        sec_list,
-                        start_date,
-                        api_key=None,
-                        interval=False,
-                        adb_mode='write',
-                        **kwargs
-                        ):
+def ohlcv_intrinio_to_arcticdb(*,
+                               sec_list,
+                               start_date,
+                               api_key=None,
+                               interval=False,
+                               adb_mode='write',
+                               **kwargs
+                               ):
     from chronos_lab.intrinio import Intrinio
     from chronos_lab.arcdb import ArcDB
 
@@ -49,7 +50,7 @@ def save_ohlcv_intrinio(*,
     }
 
     intr = Intrinio(api_key=api_key)
-    secs_prices = []
+
     secs_prices_dict = {}
     cols_interval = ['id', 'date', 'open', 'high', 'low', 'close', 'volume', 'interval']
 
@@ -80,8 +81,6 @@ def save_ohlcv_intrinio(*,
             if sec_prices['security']['ticker'] != id:
                 sp_df['symbol'] = sec_prices['security']['ticker']
                 secs_prices_dict[sec_prices['security']['ticker']] = sp_df.set_index('date').sort_index()
-
-            secs_prices.append(sp_df.set_index(['id', 'date']))
         else:
             logger.warning('Failed to request prices for item %s.', id)
         i += 1
@@ -98,73 +97,188 @@ def save_ohlcv_intrinio(*,
     return response
 
 
-def get_ohlcv(
+def ohlcv_yfinance_to_arcticdb(
+        *,
         symbols: List[str],
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
         period: Optional[str] = None,
-        columns: Optional[List[str]] = None,
-        library_name: Optional[str] = "uscomp",
-        pivot: bool = False,
-) -> str:
+        start_date: Optional[str | datetime] = None,
+        end_date: Optional[str | datetime] = None,
+        interval: str = '1d',
+        adb_mode: str = 'write',
+        **kwargs
+) -> Dict[str, int]:
     """
-    Retrieve historical or intraday stock price time series data from ArcticDB.
-
-    The function returns a pandas DataFrame whose structure depends on the
-    `library_name`, `columns`, and `pivot` arguments.
-
-    By default, the data is returned in long format with a MultiIndex
-    (date, symbol). If `pivot=True` and exactly one data column is present,
-    the data is returned in wide format with one column per symbol.
+    Download OHLCV data from Yahoo Finance and save to ArcticDB.
 
     Args:
-        symbols:
-            List of stock ticker symbols (e.g., ['AAPL', 'MSFT']).
-
-        start_date:
-            Optional ISO date string (e.g., '2024-01-01').
-            Required if `period` is not specified.
-
-        end_date:
-            Optional ISO date string.
-            Defaults to current UTC time.
-
-        period:
-            Optional relative period string such as '5d', '3m', or '1y'.
-            If provided, `start_date` is derived relative to current UTC time.
-
-        columns:
-            Optional list of columns to retrieve.
-            If omitted, defaults to:
-                - ['adj_close'] for library_name='uscomp'
-                - ['close'] for library_name='uscomp_id'
-
-        library_name:
-            Data source to query:
-                - 'uscomp'    : daily U.S. equity data
-                - 'uscomp_id' : intraday 5-minute data
-
-        pivot:
-            If True and exactly one column is returned, reshapes the output so
-            each symbol becomes a separate column named '<column>_<symbol>'.
+        symbols: List of symbols to download.
+        period: Period to download (e.g., 1d, 5d, 1mo, 1y, max).
+            Use either period or start_date.
+        start_date: Start date (YYYY-MM-DD or datetime), inclusive.
+        end_date: End date (YYYY-MM-DD or datetime), exclusive.
+        interval: Data interval (e.g., 1m, 1h, 1d, 1wk). Defaults to '1d'.
+        adb_mode: ArcticDB write mode. Defaults to 'write'.
+        **kwargs: Additional arguments passed to yfinance.download().
 
     Returns:
-        pandas.DataFrame or str:
-            - A DataFrame indexed by (date, symbol) when pivot=False
-            - A DataFrame indexed by DatetimeIndex with one column per symbol
-              when pivot=True and exactly one column is present
-            - A human-readable error message string if retrieval fails
+        Dictionary with 'statusCode' (0 for success, -1 for failure).
+    """
+    from chronos_lab.arcdb import ArcDB
+    import yfinance as yf
+
+    response = {
+        'statusCode': 0,
+    }
+
+    if period is None and start_date is None:
+        logger.error("Either start_date or period must be specified")
+        response['statusCode'] = -1
+        return response
+
+    intraday_intervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']
+    intraday = interval in intraday_intervals
+
+    if len(symbols) > 100:
+        logger.error('symbols size exceeds 100 symbols. Please limit to 100 symbols per invocation.')
+        response['statusCode'] = -1
+        return response
+
+    secs_prices_dict = {}
+    sec_count = len(symbols)
+
+    logger.info('Downloading data for %s symbols from Yahoo Finance', sec_count)
+
+    try:
+        yf_df = yf.download(
+            tickers=symbols,
+            period=period,
+            start=start_date,
+            end=end_date,
+            interval=interval,
+            group_by='ticker',
+            threads=True,
+            **kwargs
+        )
+
+        if yf_df.empty:
+            logger.error('No data returned from Yahoo Finance')
+            response['statusCode'] = -1
+            return response
+
+        for symbol in symbols:
+            try:
+                symbol_df = yf_df[symbol].copy()
+
+                if symbol_df.empty or symbol_df.dropna(how='all').empty:
+                    logger.warning('No data returned for symbol %s', symbol)
+                    continue
+
+                symbol_df = symbol_df.reset_index()
+
+                column_mapping = {
+                    'Date': 'date',
+                    'Datetime': 'date',
+                    'Open': 'open',
+                    'High': 'high',
+                    'Low': 'low',
+                    'Close': 'close',
+                    'Volume': 'volume',
+                }
+                symbol_df = symbol_df.rename(columns=column_mapping)
+                symbol_df['symbol'] = symbol
+
+                if 'date' in symbol_df.columns:
+                    symbol_df['date'] = pd.to_datetime(symbol_df['date'], utc=True)
+
+                if intraday:
+                    symbol_df['interval'] = interval
+                    cols_to_keep = ['date', 'open', 'high', 'low', 'close', 'volume', 'symbol', 'interval']
+                else:
+                    cols_to_keep = ['date', 'open', 'high', 'low', 'close', 'volume', 'symbol']
+
+                symbol_df = symbol_df[cols_to_keep].dropna(subset=['close'])
+                symbol_df.columns.name = None
+
+                if len(symbol_df) == 0:
+                    logger.warning('No valid data for symbol %s after filtering', symbol)
+                    continue
+
+                symbol_df = symbol_df.set_index('date').sort_index()
+                secs_prices_dict[symbol] = symbol_df
+
+                logger.info('Successfully retrieved %s rows for %s', len(symbol_df), symbol)
+
+            except Exception as e:
+                logger.error('Failed to process data for symbol %s: %s', symbol, str(e))
+                continue
+
+    except Exception as e:
+        logger.error('Failed to download data from Yahoo Finance: %s', str(e))
+        response['statusCode'] = -1
+        return response
+
+    if len(secs_prices_dict) == 0:
+        logger.error('No data retrieved for any symbols')
+        response['statusCode'] = -1
+        return response
+
+    try:
+        ac = ArcDB(library_name='uscomp_id' if intraday else 'uscomp')
+        ac_res = ac.batch_store(data_dict=secs_prices_dict, mode=adb_mode, prune_previous_versions=True)
+
+        if ac_res['statusCode'] == 0:
+            logger.info("Successfully stored prices for %s symbols in ArcticDB", len(secs_prices_dict))
+        else:
+            logger.error("Failed to store data in ArcticDB")
+            response['statusCode'] = -1
+    except Exception as e:
+        logger.error("Exception while storing in ArcticDB: %s", str(e))
+        response['statusCode'] = -1
+
+    return response
+
+
+def ohlcv_from_arcticdb(
+        symbols: List[str],
+        start_date: Optional[Union[str, pd.Timestamp]] = None,
+        end_date: Optional[Union[str, pd.Timestamp]] = None,
+        period: Optional[str] = None,
+        columns: Optional[List[str]] = None,
+        library_name: Optional[Literal["uscomp", "uscomp_id"]] = "uscomp",
+        pivot: bool = False,
+        group_by: Optional[Literal["column", "symbol"]] = "column",
+) -> str:
+    """
+    Retrieve historical or intraday stock price data from ArcticDB.
+
+    Returns DataFrame with MultiIndex (date, symbol) by default, or wide format
+    with one column per symbol when pivot=True and one data column selected.
+
+    Args:
+        symbols: List of ticker symbols (e.g., ['AAPL', 'MSFT'])
+        start_date: Start date (ISO string or pd.Timestamp). Mutually exclusive with period.
+        end_date: End date (ISO string or pd.Timestamp). Defaults to now.
+        period: Relative period ('5d', '3m', '1y'). Mutually exclusive with start_date/end_date.
+        columns: Columns to retrieve. Defaults to ['adj_close'] for 'uscomp', ['close'] for 'uscomp_id'.
+        library_name: Data source - 'uscomp' (daily) or 'uscomp_id' (5-min intraday)
+        pivot: If True, reshape to wide format
+        group_by: When pivoting, either group by ‘symbol’ or ‘column’ (default)
+
+    Returns:
+        DataFrame indexed by (date, symbol) or DatetimeIndex if pivoted, or error message string
     """
 
     from chronos_lab.arcdb import ArcDB
 
-    if period is None and start_date is None:
-        return "Either start_date or period must be specified"
-
     current_time = pd.Timestamp.now(tz='UTC')
 
+    if period and (start_date or end_date):
+        logger.error("Cannot specify both 'period' and 'start_date'/'end_date'. Use one or the other.")
+        return None
+
+    read_kwargs = {}
+
     if period:
-        end_dt = current_time
         value = int(period[:-1])
         unit = period[-1]
         if unit == 'd':
@@ -177,33 +291,41 @@ def get_ohlcv(
             start_dt = current_time - pd.DateOffset(years=value)
         else:
             return f"Invalid period unit: {unit}. Use 'd', 'w', 'm', or 'y'"
-    else:
-        start_dt = pd.to_datetime(start_date, utc=True)
-        end_dt = pd.to_datetime(end_date, utc=True) if end_date else current_time
+        read_kwargs['date_range'] = (start_dt, current_time)
+    elif start_date or end_date:
+        start_dt = None
+        if start_date:
+            start_dt = pd.to_datetime(start_date, utc=True) if isinstance(start_date, str) else start_date
 
-    ac = ArcDB(library_name=library_name)
+        end_dt = current_time
+        if end_date:
+            end_dt = pd.to_datetime(end_date, utc=True) if isinstance(end_date, str) else end_date
 
-    read_kwargs = {
-        'date_range': (start_dt, end_dt)
-    }
+        if start_dt:
+            read_kwargs['date_range'] = (start_dt, end_dt)
+        else:
+            read_kwargs['date_range'] = (None, end_dt)
+
     if columns is not None:
         read_kwargs['columns'] = list(set(columns) | {'symbol'})
-    elif library_name == 'uscomp':
-        read_kwargs['columns'] = ["symbol", "adj_close"]
-    elif library_name == 'uscomp_id':
-        read_kwargs['columns'] = ["symbol", "close"]
+
+    ac = ArcDB(library_name=library_name)
 
     result = ac.batch_read(symbol_list=symbols, **read_kwargs)
 
     if result['statusCode'] == 0:
         result_df = result['payload'].sort_values(['symbol', 'date']).set_index('symbol', append=True)
 
-        if pivot and len(result_df.columns) == 1:
+        if pivot:
             result_df_output = result_df.unstack('symbol')
-            result_df_output.columns = ['_'.join(col).strip() for col in result_df_output.columns.values]
+            if group_by == 'symbol':
+                result_df_output.columns = result_df_output.columns.swaplevel(0, 1)
+            result_df_output = result_df_output.sort_index(axis=1)
+
         else:
             result_df_output = result_df
 
         return result_df_output
     else:
-        return f"No data found for symbols {symbols} in date range {start_date} to {end_date}."
+        logger.warning(f"No data found for symbols {symbols} in date range {start_date} to {end_date}.")
+        return None

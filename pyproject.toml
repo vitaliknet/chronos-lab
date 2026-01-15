@@ -10,11 +10,9 @@ authors = [
 ]
 dependencies = [
     "arcticdb",
-    "fastmcp>=2.14.2",
-    "intrinio-sdk>=6.39.0",
     "numpy>=2.3.1",
     "pandas>=2.3.1",
-    "pandas-stubs~=2.3.3",
+    "pydantic-settings>=2.12.0",
 ]
 
 [tool.uv]
@@ -35,10 +33,13 @@ arcticdb = [
 
 [dependency-groups]
 dev = [
+    "pandas-stubs~=2.3.3",
 ]
 
 [project.optional-dependencies]
 mcp = ["fastmcp>=2.14.2"]
+yfinance = ["yfinance>=1.0"]
+intrinio = ["intrinio-sdk>=6.39.0"]
 
 [build-system]
 requires = ["hatchling"]
