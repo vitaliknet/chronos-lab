@@ -1,18 +1,41 @@
 from chronos_lab import logger
+from chronos_lab.settings import get_settings
 from typing import List, Optional, Dict, Union, Literal
 from datetime import datetime
 import pandas as pd
 
 
-def securities_intrinio(*,
-                         api_key=None,
-                         composite_mic='USCOMP',
-                         codes=None,
-                         ):
-    from chronos_lab.intrinio import Intrinio
+def securities_from_intrinio(
+        *,
+        api_key: Optional[str] = None,
+        composite_mic: str = 'USCOMP',
+        codes: List[Literal[
+            'EQS', 'ETF', 'DR', 'PRF', 'WAR', 'RTS', 'UNT', 'CEF', 'ETN', 'ETC'
+        ]] = ['EQS'],
+) -> pd.DataFrame | None:
+    """
+    Retrieve securities list from Intrinio API.
 
-    if codes is None:
-        codes = ['EQS']
+    Args:
+        api_key: Intrinio API key. If None, uses default from Intrinio class.
+        composite_mic: Composite MIC code for the exchange. Defaults to 'USCOMP'.
+        codes: List of security type codes. Common codes include:
+            - 'EQS': Equity Shares (common stocks)
+            - 'ETF': Exchange Traded Funds
+            - 'DR': Depository Receipts (ADRs, GDRs, etc.)
+            - 'PRF': Preference Shares (preferred stock)
+            - 'WAR': Warrants
+            - 'RTS': Rights
+            - 'UNT': Units
+            - 'CEF': Closed-Ended Funds
+            - 'ETN': Exchange Traded Notes
+            - 'ETC': Exchange Traded Commodities
+            Defaults to ['EQS'] if None.
+
+    Returns:
+        DataFrame with securities indexed by 'id', or None on error.
+    """
+    from chronos_lab.intrinio import Intrinio
 
     intr = Intrinio(api_key=api_key)
 
@@ -34,37 +57,73 @@ def securities_intrinio(*,
     return securities
 
 
-def ohlcv_intrinio_to_arcticdb(*,
-                               sec_list,
-                               start_date,
-                               api_key=None,
-                               interval=False,
-                               adb_mode='write',
-                               **kwargs
-                               ):
-    from chronos_lab.intrinio import Intrinio
-    from chronos_lab.arcdb import ArcDB
+def ohlcv_from_intrinio(
+        *,
+        symbols: List[str],
+        period: Optional[str] = None,
+        start_date: Optional[str | datetime] = None,
+        end_date: Optional[str | datetime] = None,
+        interval: Optional[Literal[
+            '1m', '5m', '10m', '15m', '30m', '60m', '1h',
+            'daily', 'weekly', 'monthly', 'quarterly', 'yearly']] = 'daily',
+        api_key: Optional[str] = None,
+        output_dict: Optional[bool] = False,
+        **kwargs
+) -> Dict[str, pd.DataFrame] | pd.DataFrame | None:
+    """
+    Download OHLCV data from Intrinio API.
 
-    response = {
-        'statusCode': 0,
-    }
+    Args:
+        symbols: List of security identifiers to download.
+        period: Period to download (e.g., 1d, 5d, 1mo, 1y, max).
+            Use either period or start_date.
+        start_date: Start date (YYYY-MM-DD or datetime), inclusive.
+        end_date: End date (YYYY-MM-DD or datetime), exclusive.
+        interval: Data interval. Intraday: 1m, 5m, 10m, 15m, 30m, 60m, 1h.
+            Non-intraday: daily, weekly, monthly, quarterly, yearly. Defaults to 'daily'.
+        api_key: Intrinio API key. If None, read from .env file.
+        output_dict: If True, return dict of DataFrames by symbol.
+            If False, return MultiIndex DataFrame with ('date', 'id') levels.
+        **kwargs: Additional arguments passed to Intrinio API.
+
+    Returns:
+        Dict of DataFrames (if output_dict=True), MultiIndex DataFrame (if False),
+        or None on error.
+    """
+    from chronos_lab.intrinio import Intrinio
+
+    if interval in ['1m', '5m', '10m', '15m', '30m', '60m', '1h']:
+        kwargs['interval_size'] = interval
+        interval = True
+    else:
+        kwargs['frequency'] = interval
+        interval = False
+
+    if period:
+        start_date, end_date = _period(period)
 
     intr = Intrinio(api_key=api_key)
 
     secs_prices_dict = {}
     cols_interval = ['id', 'date', 'open', 'high', 'low', 'close', 'volume', 'interval']
 
-    sec_count = len(sec_list)
+    sec_count = len(symbols)
     i = 0
-    for id in sec_list:
+    for id in symbols:
         logger.info('Processing item %s (%s/%s)', id, i, sec_count)
+
         sec_prices = intr.get_security_stock_prices(page_size=100,
                                                     identifier=id,
                                                     start_date=start_date,
+                                                    end_date=end_date,
                                                     output_df=False,
                                                     interval=interval,
                                                     **kwargs
                                                     )
+        if sec_prices['statusCode'] == -1:
+            logger.warning('Failed to request prices for item %s.', id)
+            continue
+
         sp_df = pd.DataFrame(sec_prices['stockPrices'])
         if len(sp_df) != 0:
             sp_df['id'] = id
@@ -80,50 +139,50 @@ def ohlcv_intrinio_to_arcticdb(*,
 
             if sec_prices['security']['ticker'] != id:
                 sp_df['symbol'] = sec_prices['security']['ticker']
-                secs_prices_dict[sec_prices['security']['ticker']] = sp_df.set_index('date').sort_index()
+
+            secs_prices_dict[sec_prices['security']['ticker']] = sp_df.set_index('date').sort_index()
         else:
             logger.warning('Failed to request prices for item %s.', id)
         i += 1
 
-    ac = ArcDB(library_name='uscomp_id' if interval else 'uscomp')
-    ac_res = ac.batch_store(data_dict=secs_prices_dict, mode=adb_mode, prune_previous_versions=True)
+    if len(secs_prices_dict) == 0:
+        logger.error('No data retrieved for any symbols')
+        return None
 
-    if ac_res['statusCode'] == 0:
-        logger.info("Successfully stored prices in ArcticDB")
+    if output_dict:
+        return secs_prices_dict
     else:
-        logger.error("Failed to store snapshot in ArcticDB")
-        response['statusCode'] = -1
-
-    return response
+        return pd.concat(secs_prices_dict.values()).set_index(['id'], append=True)
 
 
-def ohlcv_yfinance_to_arcticdb(
+def ohlcv_from_yfinance(
         *,
         symbols: List[str],
         period: Optional[str] = None,
         start_date: Optional[str | datetime] = None,
         end_date: Optional[str | datetime] = None,
-        interval: str = '1d',
-        adb_mode: str = 'write',
+        interval: Optional[str] = '1d',
+        output_dict: Optional[bool] = False,
         **kwargs
-) -> Dict[str, int]:
+) -> Dict[str, pd.DataFrame] | pd.DataFrame | None:
     """
-    Download OHLCV data from Yahoo Finance and save to ArcticDB.
+    Download OHLCV data from Yahoo Finance.
 
     Args:
-        symbols: List of symbols to download.
+        symbols: List of symbols to download (max 100).
         period: Period to download (e.g., 1d, 5d, 1mo, 1y, max).
             Use either period or start_date.
         start_date: Start date (YYYY-MM-DD or datetime), inclusive.
         end_date: End date (YYYY-MM-DD or datetime), exclusive.
         interval: Data interval (e.g., 1m, 1h, 1d, 1wk). Defaults to '1d'.
-        adb_mode: ArcticDB write mode. Defaults to 'write'.
+        output_dict: If True, return dict of DataFrames by symbol.
+            If False, return MultiIndex DataFrame with ('date', 'symbol') levels.
         **kwargs: Additional arguments passed to yfinance.download().
 
     Returns:
-        Dictionary with 'statusCode' (0 for success, -1 for failure).
+        Dict of DataFrames (if output_dict=True), MultiIndex DataFrame (if False),
+        or None on error.
     """
-    from chronos_lab.arcdb import ArcDB
     import yfinance as yf
 
     response = {
@@ -133,7 +192,7 @@ def ohlcv_yfinance_to_arcticdb(
     if period is None and start_date is None:
         logger.error("Either start_date or period must be specified")
         response['statusCode'] = -1
-        return response
+        return None
 
     intraday_intervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']
     intraday = interval in intraday_intervals
@@ -141,7 +200,7 @@ def ohlcv_yfinance_to_arcticdb(
     if len(symbols) > 100:
         logger.error('symbols size exceeds 100 symbols. Please limit to 100 symbols per invocation.')
         response['statusCode'] = -1
-        return response
+        return None
 
     secs_prices_dict = {}
     sec_count = len(symbols)
@@ -163,7 +222,7 @@ def ohlcv_yfinance_to_arcticdb(
         if yf_df.empty:
             logger.error('No data returned from Yahoo Finance')
             response['statusCode'] = -1
-            return response
+            return None
 
         for symbol in symbols:
             try:
@@ -215,19 +274,75 @@ def ohlcv_yfinance_to_arcticdb(
     except Exception as e:
         logger.error('Failed to download data from Yahoo Finance: %s', str(e))
         response['statusCode'] = -1
-        return response
+        return None
 
     if len(secs_prices_dict) == 0:
         logger.error('No data retrieved for any symbols')
         response['statusCode'] = -1
-        return response
+        return None
+
+    if output_dict:
+        return secs_prices_dict
+    else:
+        return pd.concat(secs_prices_dict.values()).set_index(['symbol'], append=True)
+
+
+def ohlcv_to_arcticdb(
+        *,
+        ohlcv: pd.DataFrame | Dict[str, pd.DataFrame],
+        library_name: Optional[str] = None,
+        adb_mode: str = 'write'
+) -> Dict[str, int]:
+    """
+    Store OHLCV data to ArcticDB library.
+
+    Accepts either a MultiIndex DataFrame with ('date', 'id'/'symbol') levels
+    or a dictionary of DataFrames keyed by symbol/id. Splits MultiIndex DataFrames
+    by symbol before storage.
+
+    Args:
+        ohlcv: DataFrame with 2-level MultiIndex or dict of DataFrames by symbol
+        library_name: ArcticDB library name (default from ~/.chronos_lab/.env)
+        adb_mode: Storage mode for ArcticDB (default: 'write')
+
+    Returns:
+        Dict with 'statusCode': 0 on success, -1 on failure
+    """
+    from chronos_lab.arcdb import ArcDB
+
+    response = {
+        'statusCode': 0,
+    }
+
+    if library_name is None:
+        settings = get_settings()
+        library_name = settings.arcticdb_default_library_name
+
+    if isinstance(ohlcv, pd.DataFrame):
+        if ohlcv.index.nlevels != 2:
+            logger.error(f"Expected MultiIndex with 2 levels, got {ohlcv.index.nlevels}")
+            response['statusCode'] = -1
+            return response
+
+        level_0_name = ohlcv.index.names[0]
+        level_1_name = ohlcv.index.names[1]
+
+        if level_0_name != 'date' or level_1_name not in ['id', 'symbol']:
+            logger.error(
+                f"Index levels are ('{level_0_name}', '{level_1_name}'), expected ('date', 'id') or ('date', 'symbol')")
+            response['statusCode'] = -1
+            return response
+
+        ohlcv_dict = dict(tuple(ohlcv.reset_index(level=1).groupby(level_1_name)))
+    else:
+        ohlcv_dict = ohlcv
 
     try:
-        ac = ArcDB(library_name='uscomp_id' if intraday else 'uscomp')
-        ac_res = ac.batch_store(data_dict=secs_prices_dict, mode=adb_mode, prune_previous_versions=True)
+        ac = ArcDB(library_name=library_name)
+        ac_res = ac.batch_store(data_dict=ohlcv_dict, mode=adb_mode, prune_previous_versions=True)
 
         if ac_res['statusCode'] == 0:
-            logger.info("Successfully stored prices for %s symbols in ArcticDB", len(secs_prices_dict))
+            logger.info("Successfully stored prices for %s symbols in ArcticDB", len(ohlcv_dict))
         else:
             logger.error("Failed to store data in ArcticDB")
             response['statusCode'] = -1
@@ -244,31 +359,39 @@ def ohlcv_from_arcticdb(
         end_date: Optional[Union[str, pd.Timestamp]] = None,
         period: Optional[str] = None,
         columns: Optional[List[str]] = None,
-        library_name: Optional[Literal["uscomp", "uscomp_id"]] = "uscomp",
+        library_name: Optional[str] = None,
         pivot: bool = False,
         group_by: Optional[Literal["column", "symbol"]] = "column",
-) -> str:
+) -> Optional[pd.DataFrame]:
     """
     Retrieve historical or intraday stock price data from ArcticDB.
 
     Returns DataFrame with MultiIndex (date, symbol) by default, or wide format
-    with one column per symbol when pivot=True and one data column selected.
+    with pivoted symbols when pivot=True.
 
     Args:
         symbols: List of ticker symbols (e.g., ['AAPL', 'MSFT'])
         start_date: Start date (ISO string or pd.Timestamp). Mutually exclusive with period.
-        end_date: End date (ISO string or pd.Timestamp). Defaults to now.
+        end_date: End date (ISO string or pd.Timestamp). Defaults to current UTC time if not specified.
         period: Relative period ('5d', '3m', '1y'). Mutually exclusive with start_date/end_date.
-        columns: Columns to retrieve. Defaults to ['adj_close'] for 'uscomp', ['close'] for 'uscomp_id'.
-        library_name: Data source - 'uscomp' (daily) or 'uscomp_id' (5-min intraday)
-        pivot: If True, reshape to wide format
-        group_by: When pivoting, either group by ‘symbol’ or ‘column’ (default)
+        columns: Columns to retrieve. 'symbol' column is always included automatically.
+        library_name: ArcticDB library name (default from ~/.chronos_lab/.env)
+        pivot: If True, reshape to wide format with symbols unstacked
+        group_by: When pivoting, controls column MultiIndex order:
+                  'column' (default) - (column, symbol) ordering
+                  'symbol' - (symbol, column) ordering
 
     Returns:
-        DataFrame indexed by (date, symbol) or DatetimeIndex if pivoted, or error message string
+        DataFrame with MultiIndex (date, symbol) if pivot=False, or
+        DataFrame with DatetimeIndex and MultiIndex columns if pivot=True.
+        Returns None if no data found or if both period and start_date/end_date are specified.
     """
 
     from chronos_lab.arcdb import ArcDB
+
+    if library_name is None:
+        settings = get_settings()
+        library_name = settings.arcticdb_default_library_name
 
     current_time = pd.Timestamp.now(tz='UTC')
 
@@ -279,19 +402,7 @@ def ohlcv_from_arcticdb(
     read_kwargs = {}
 
     if period:
-        value = int(period[:-1])
-        unit = period[-1]
-        if unit == 'd':
-            start_dt = current_time - pd.DateOffset(days=value)
-        elif unit == 'w':
-            start_dt = current_time - pd.DateOffset(weeks=value)
-        elif unit == 'm':
-            start_dt = current_time - pd.DateOffset(months=value)
-        elif unit == 'y':
-            start_dt = current_time - pd.DateOffset(years=value)
-        else:
-            return f"Invalid period unit: {unit}. Use 'd', 'w', 'm', or 'y'"
-        read_kwargs['date_range'] = (start_dt, current_time)
+        read_kwargs['date_range'] = _period(period=period)
     elif start_date or end_date:
         start_dt = None
         if start_date:
@@ -329,3 +440,45 @@ def ohlcv_from_arcticdb(
     else:
         logger.warning(f"No data found for symbols {symbols} in date range {start_date} to {end_date}.")
         return None
+
+
+def _period(period: str, as_of: Optional[pd.Timestamp] = None) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Convert period string to date range tuple.
+
+    Args:
+        period: Period string (e.g., '7d', '4w', '3mo', '1y')
+        as_of: Reference timestamp (defaults to current UTC time)
+
+    Returns:
+        Tuple of (start_datetime, end_datetime)
+
+    Raises:
+        ValueError: If period unit is invalid
+    """
+    end_dt = as_of if as_of is not None else pd.Timestamp.now(tz='UTC')
+
+    value = int(period[:-1]) if period[-1].isalpha() else int(period[:-2])
+    unit = period[-1] if period[-1].isalpha() else period[-2:]
+
+    offset_map = {
+        'd': pd.DateOffset(days=value),
+        'w': pd.DateOffset(weeks=value),
+        'mo': pd.DateOffset(months=value),
+        'm': pd.DateOffset(months=value),
+        'y': pd.DateOffset(years=value)
+    }
+
+    if unit not in offset_map:
+        raise ValueError(f"Invalid period unit: {unit}. Use 'd', 'w', 'mo'/'m', or 'y'")
+
+    start_dt = end_dt - offset_map[unit]
+    return (start_dt, end_dt)
+
+
+__all__ = [
+    'ohlcv_from_intrinio',
+    'ohlcv_from_yfinance',
+    'ohlcv_from_arcticdb',
+    'ohlcv_to_arcticdb',
+    'securities_from_intrinio'
+]

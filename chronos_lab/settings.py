@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     intrinio_api_key: Optional[str] = None
     log_level: str = "INFO"
 
+    arcticdb_default_library_name: Optional[str] = "uscomp"
     arcticdb_local_path: Optional[str] = None
     arcticdb_s3_bucket: Optional[str] = None
 

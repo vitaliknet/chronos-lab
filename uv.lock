@@ -2,8 +2,11 @@ version = 1
 revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
-    "sys_platform != '-linux'",
-    "sys_platform == '-linux'",
+    "platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "platform_machine == 'aarch64' and sys_platform != '-linux' and sys_platform != 'linux'",
+    "platform_machine != 'aarch64' and sys_platform != '-linux'",
+    "platform_machine == 'aarch64' and sys_platform == '-linux'",
+    "platform_machine != 'aarch64' and sys_platform == '-linux'",
 ]
 required-markers = [
     "sys_platform == 'darwin'",
@@ -35,19 +38,82 @@ wheels = [
 name = "arcticdb"
 version = "6.7.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "platform_machine == 'aarch64' and sys_platform != '-linux' and sys_platform != 'linux'",
+    "platform_machine != 'aarch64' and sys_platform != '-linux'",
+    "platform_machine == 'aarch64' and sys_platform == '-linux'",
+    "platform_machine != 'aarch64' and sys_platform == '-linux'",
+]
 dependencies = [
-    { name = "attrs" },
-    { name = "msgpack" },
-    { name = "numpy" },
-    { name = "packaging" },
-    { name = "pandas" },
-    { name = "protobuf" },
-    { name = "pyyaml" },
+    { name = "attrs", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "msgpack", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "numpy", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "packaging", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "pandas", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "protobuf", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "pyyaml", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/26/61/132241481127448cb1d8edc9ea681cd70fe9782f2063716f415f7033f390/arcticdb-6.7.0-cp313-cp313-macosx_15_0_arm64.whl", hash = "sha256:229f8a75946f66041239e021998773967177036fbbb0f04c56fb33cb0adcc5f5", size = 17475883, upload-time = "2026-01-12T13:07:56.554Z" },
     { url = "https://files.pythonhosted.org/packages/db/d7/af6d10942450aac2e8e6a071bfa8bebf24bb93674a12595d0326500fe7d5/arcticdb-6.7.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c4be92e5d40db29857b362152e69da249f23e788ba7f5348386e5f9e43a8d0e7", size = 18836932, upload-time = "2026-01-12T13:07:59.069Z" },
 ]
+
+[[package]]
+name = "arcticdb"
+version = "6.7.0"
+source = { path = "arcticdb-linux_aarch64/dist/arcticdb-6.7.0-cp313-cp313-linux_aarch64.whl" }
+resolution-markers = [
+    "platform_machine == 'aarch64' and sys_platform == 'linux'",
+]
+dependencies = [
+    { name = "attrs", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "msgpack", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "numpy", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "packaging", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "pandas", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "protobuf", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "pyyaml", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+]
+wheels = [
+    { filename = "arcticdb-6.7.0-cp313-cp313-linux_aarch64.whl", hash = "sha256:21966e12c51f052a62351dfcace2c0abf5a9b4b39669720f0711bbc78c1156b6" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asv", marker = "(python_full_version < '3.13' and extra == 'testing') or (sys_platform == 'linux' and extra == 'testing')" },
+    { name = "attrs" },
+    { name = "azure-identity", marker = "extra == 'testing'" },
+    { name = "azure-storage-blob", marker = "extra == 'testing'" },
+    { name = "boto3", marker = "extra == 'testing'" },
+    { name = "coverage", marker = "extra == 'testing'" },
+    { name = "flask", marker = "extra == 'testing'" },
+    { name = "flask-cors", marker = "extra == 'testing'" },
+    { name = "future", marker = "extra == 'testing'" },
+    { name = "hypothesis", marker = "extra == 'testing'", specifier = "<6.73" },
+    { name = "mock", marker = "extra == 'testing'" },
+    { name = "moto", marker = "extra == 'testing'" },
+    { name = "msgpack", specifier = ">=0.5.0" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "packaging", marker = "extra == 'testing'" },
+    { name = "pandas" },
+    { name = "polars", marker = "extra == 'arrow'" },
+    { name = "polars", marker = "extra == 'testing'" },
+    { name = "protobuf", specifier = ">=3.5.0.post1,<7" },
+    { name = "psutil", marker = "extra == 'testing'" },
+    { name = "pyarrow", marker = "extra == 'arrow'" },
+    { name = "pyarrow", marker = "extra == 'testing'" },
+    { name = "pymongo", marker = "extra == 'testing'" },
+    { name = "pytest", marker = "extra == 'testing'" },
+    { name = "pytest-cpp", marker = "extra == 'testing'" },
+    { name = "pytest-timeout", marker = "extra == 'testing'" },
+    { name = "pytest-xdist", marker = "extra == 'testing'" },
+    { name = "pyyaml" },
+    { name = "retrying", marker = "extra == 'testing'" },
+    { name = "trustme", marker = "extra == 'testing'" },
+    { name = "virtualenv", marker = "extra == 'testing'" },
+]
+provides-extras = ["arrow", "testing"]
 
 [[package]]
 name = "attrs"
@@ -201,13 +267,16 @@ name = "chronos-lab"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "arcticdb" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pydantic-settings" },
 ]
 
 [package.optional-dependencies]
+arcticdb = [
+    { name = "arcticdb", version = "6.7.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "arcticdb", version = "6.7.0", source = { path = "arcticdb-linux_aarch64/dist/arcticdb-6.7.0-cp313-cp313-linux_aarch64.whl" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+]
 intrinio = [
     { name = "intrinio-sdk" },
 ]
@@ -225,8 +294,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "arcticdb", marker = "sys_platform != '-linux'", index = "https://pypi.org/simple" },
-    { name = "arcticdb", marker = "sys_platform == '-linux'" },
+    { name = "arcticdb", marker = "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'arcticdb'", path = "arcticdb-linux_aarch64/dist/arcticdb-6.7.0-cp313-cp313-linux_aarch64.whl" },
+    { name = "arcticdb", marker = "platform_machine == 'aarch64' and sys_platform != 'linux' and extra == 'arcticdb'", index = "https://pypi.org/simple" },
+    { name = "arcticdb", marker = "platform_machine != 'aarch64' and extra == 'arcticdb'" },
     { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=2.14.2" },
     { name = "intrinio-sdk", marker = "extra == 'intrinio'", specifier = ">=6.39.0" },
     { name = "numpy", specifier = ">=2.3.1" },
@@ -234,7 +304,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.12.0" },
     { name = "yfinance", marker = "extra == 'yfinance'", specifier = ">=1.0" },
 ]
-provides-extras = ["mcp", "yfinance", "intrinio"]
+provides-extras = ["arcticdb", "mcp", "yfinance", "intrinio"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pandas-stubs", specifier = "~=2.3.3" }]
@@ -1488,8 +1558,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != '-linux'" },
-    { name = "jeepney", marker = "sys_platform != '-linux'" },
+    { name = "cryptography", marker = "(platform_machine != 'aarch64' and sys_platform != '-linux') or sys_platform == 'linux'" },
+    { name = "jeepney", marker = "(platform_machine != 'aarch64' and sys_platform != '-linux') or sys_platform == 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
