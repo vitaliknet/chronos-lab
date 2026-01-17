@@ -71,7 +71,7 @@ uv sync --extra yfinance --extra mcp
 ```
 ## Configuration
 
-On first import of chronos-lab (e.g., `import chronos_lab` or `from chronos_lab.utils import ...`), the package automatically creates `~/.chronos_lab/.env` with default settings. This file can be edited to configure API keys, storage paths, and other options:
+On first import of chronos-lab (e.g., `import chronos_lab` or `from chronos_lab.sources import ...`), the package automatically creates `~/.chronos_lab/.env` with default settings. This file can be edited to configure API keys, storage paths, and other options:
 
 ```bash
 # View or edit configuration
@@ -88,7 +88,7 @@ The configuration file includes settings for data sources (Intrinio API), storag
 Get daily price data for multiple symbols with minimal setup:
 
 ```python
-from chronos_lab.utils import ohlcv_from_yfinance
+from chronos_lab.sources import ohlcv_from_yfinance
 
 # Download last year of daily data
 prices = ohlcv_from_yfinance(
@@ -140,7 +140,7 @@ aapl_prices = prices_dict['AAPL']
 Access institutional-quality financial data:
 
 ```python
-from chronos_lab.utils import ohlcv_from_intrinio
+from chronos_lab.sources import ohlcv_from_intrinio
 
 # Daily data (requires Intrinio API key)
 prices = ohlcv_from_intrinio(
@@ -164,7 +164,8 @@ intraday = ohlcv_from_intrinio(
 Store and version your time series data efficiently:
 
 ```python
-from chronos_lab.utils import ohlcv_from_yfinance, ohlcv_to_arcticdb
+from chronos_lab.sources import ohlcv_from_yfinance
+from chronos_lab.storage import ohlcv_to_arcticdb
 
 # Fetch and store in one workflow
 prices = ohlcv_from_yfinance(
@@ -186,7 +187,7 @@ Works with both MultiIndex DataFrames and symbol dictionaries. If library_name i
 Retrieve stored time series with flexible date filtering and formatting:
 
 ```python
-from chronos_lab.utils import ohlcv_from_arcticdb
+from chronos_lab.sources import ohlcv_from_arcticdb
 
 # Get last 3 months of data
 prices = ohlcv_from_arcticdb(
