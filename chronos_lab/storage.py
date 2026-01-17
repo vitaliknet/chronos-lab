@@ -1,3 +1,30 @@
+"""Persistent storage operations for OHLCV time series data using ArcticDB.
+
+This module provides high-level functions for storing OHLCV data in ArcticDB,
+a high-performance time series database. Data can be stored from either MultiIndex
+DataFrames or dictionaries of DataFrames, with automatic symbol-level organization.
+
+Typical Usage:
+    Store data fetched from external sources:
+
+        >>> from chronos_lab.sources import ohlcv_from_yfinance
+        >>> from chronos_lab.storage import ohlcv_to_arcticdb
+        >>>
+        >>> # Fetch data
+        >>> prices = ohlcv_from_yfinance(
+        ...     symbols=['AAPL', 'MSFT', 'GOOGL'],
+        ...     period='1y'
+        ... )
+        >>>
+        >>> # Store in ArcticDB
+        >>> result = ohlcv_to_arcticdb(
+        ...     ohlcv=prices,
+        ...     library_name='yfinance',
+        ...     adb_mode='write'
+        ... )
+        >>> print(result['statusCode'])  # 0 on success
+"""
+
 from chronos_lab import logger
 from chronos_lab.settings import get_settings
 from typing import Optional, Dict
@@ -10,20 +37,97 @@ def ohlcv_to_arcticdb(
         library_name: Optional[str] = None,
         adb_mode: str = 'write'
 ) -> Dict[str, int]:
-    """
-    Store OHLCV data to ArcticDB library.
+    """Store OHLCV data to ArcticDB library for persistent time series storage.
 
-    Accepts either a MultiIndex DataFrame with ('date', 'id'/'symbol') levels
-    or a dictionary of DataFrames keyed by symbol/id. Splits MultiIndex DataFrames
-    by symbol before storage.
+    Accepts OHLCV data in multiple formats and stores it in ArcticDB with symbol-level
+    organization. Automatically splits MultiIndex DataFrames by symbol for efficient
+    per-symbol versioning and retrieval.
 
     Args:
-        ohlcv: DataFrame with 2-level MultiIndex or dict of DataFrames by symbol
-        library_name: ArcticDB library name (default from ~/.chronos_lab/.env)
-        adb_mode: Storage mode for ArcticDB (default: 'write')
+        ohlcv: OHLCV data in one of two formats:
+            - MultiIndex DataFrame with ('date', 'id'/'symbol') levels
+            - Dictionary mapping symbols to individual DataFrames
+        library_name: ArcticDB library name for storage. If None, uses
+            ARCTICDB_DEFAULT_LIBRARY_NAME from ~/.chronos_lab/.env configuration.
+        adb_mode: Storage mode for ArcticDB operations:
+            - 'write': Overwrite existing data (default)
+            - 'append': Append new data to existing symbols
 
     Returns:
-        Dict with 'statusCode': 0 on success, -1 on failure
+        Dictionary with status information:
+            - 'statusCode': 0 on success, -1 on failure, 1 if some symbols failed
+            - 'skipped_symbols': List of symbols that failed to store (if any)
+
+    Raises:
+        None: Errors are logged but not raised. Check statusCode in return value.
+
+    Examples:
+        Store MultiIndex DataFrame from Yahoo Finance:
+            >>> from chronos_lab.sources import ohlcv_from_yfinance
+            >>> from chronos_lab.storage import ohlcv_to_arcticdb
+            >>>
+            >>> # Fetch data
+            >>> prices = ohlcv_from_yfinance(
+            ...     symbols=['AAPL', 'MSFT', 'GOOGL'],
+            ...     period='1y'
+            ... )
+            >>>
+            >>> # Store in ArcticDB
+            >>> result = ohlcv_to_arcticdb(
+            ...     ohlcv=prices,
+            ...     library_name='yfinance',
+            ...     adb_mode='write'
+            ... )
+            >>> if result['statusCode'] == 0:
+            ...     print("Successfully stored data")
+
+        Store dictionary of DataFrames from Intrinio:
+            >>> from chronos_lab.sources import ohlcv_from_intrinio
+            >>>
+            >>> # Fetch as dictionary
+            >>> prices_dict = ohlcv_from_intrinio(
+            ...     symbols=['AAPL', 'MSFT'],
+            ...     period='3mo',
+            ...     interval='daily',
+            ...     output_dict=True
+            ... )
+            >>>
+            >>> # Store dictionary directly
+            >>> result = ohlcv_to_arcticdb(
+            ...     ohlcv=prices_dict,
+            ...     library_name='intrinio'
+            ... )
+
+        Append new data to existing symbols:
+            >>> # Fetch latest data
+            >>> new_prices = ohlcv_from_yfinance(
+            ...     symbols=['AAPL', 'MSFT'],
+            ...     period='1d'
+            ... )
+            >>>
+            >>> # Append to existing data
+            >>> result = ohlcv_to_arcticdb(
+            ...     ohlcv=new_prices,
+            ...     library_name='yfinance',
+            ...     adb_mode='append'
+            ... )
+
+        Handle partial failures:
+            >>> result = ohlcv_to_arcticdb(
+            ...     ohlcv=prices,
+            ...     library_name='yfinance'
+            ... )
+            >>> if result['statusCode'] == 1:
+            ...     print(f"Failed symbols: {result['skipped_symbols']}")
+            >>> elif result['statusCode'] == 0:
+            ...     print("All symbols stored successfully")
+
+    Note:
+        - Input DataFrame must have exactly 2-level MultiIndex: ('date', 'id'/'symbol')
+        - Each symbol is stored as a separate versioned entity in ArcticDB
+        - Storage mode 'write' overwrites existing data; use 'append' to add new rows
+        - Previous versions are pruned automatically to save space
+        - All timestamps should be UTC timezone-aware
     """
     from chronos_lab.arcdb import ArcDB
 

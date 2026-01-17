@@ -2,9 +2,11 @@
 
 A lightweight Python library for time series analysis with a modular architecture. Install only what you need—from minimal data fetching to full-featured storage and MCP server capabilities.
 
+**[📚 Read the full documentation](https://vitaliknet.github.io/chronos-lab/)**
+
 ## Installation
 
-chronos-lab requires Python 3.13+ and runs on macOS and Linux.
+chronos-lab requires Python 3.12+ and runs on macOS and Linux.
 
 ### Core Installation
 
@@ -191,7 +193,7 @@ from chronos_lab.sources import ohlcv_from_arcticdb
 
 # Get last 3 months of data
 prices = ohlcv_from_arcticdb(
-    symbols=['AAPL', 'MSFT', 'GOOGL'],
+    symbols=['AAPL', 'MSFT', 'GOOGL', 'AMZN'],
     period='3m',
     library_name='yfinance'
 )

@@ -1,3 +1,68 @@
+"""Low-level Intrinio SDK wrapper for institutional financial data access.
+
+This module provides the Intrinio class, a low-level wrapper around the Intrinio SDK
+for accessing institutional-quality financial data including securities, prices, company
+information, and exchange data.
+
+**IMPORTANT**: This is a low-level wrapper intended for internal use. For most use cases,
+prefer the high-level functions in chronos_lab.sources module:
+    - Use ohlcv_from_intrinio() for fetching OHLCV data
+    - Use securities_from_intrinio() for fetching securities lists
+
+Direct usage of this module should be limited to advanced scenarios requiring fine-grained
+control over Intrinio API operations, custom pagination handling, or direct access to
+underlying Intrinio SDK APIs.
+
+API Configuration:
+    Set your Intrinio API key in ~/.chronos_lab/.env:
+        INTRINIO_API_KEY=your_api_key_here
+
+    Or pass directly to the Intrinio class constructor.
+
+Advanced API Access:
+    The Intrinio class exposes underlying Intrinio SDK API objects for advanced operations:
+        - _ApiClient: Base API client for configuration and request handling
+        - _SecurityApi: Security-related endpoints (prices, fundamentals, etc.)
+        - _CompanyApi: Company information endpoints
+        - _StockExchangeApi: Exchange and market data endpoints
+
+    For detailed API documentation and additional available APIs, refer to:
+        https://docs.intrinio.com/documentation/python
+
+Typical Usage:
+    Basic operations (internal use):
+        >>> from chronos_lab.intrinio import Intrinio
+        >>>
+        >>> # Initialize with API key
+        >>> intr = Intrinio(api_key='your_key')
+        >>>
+        >>> # Fetch securities list
+        >>> result = intr.get_all_securities(
+        ...     active=True,
+        ...     composite_mic='USCOMP',
+        ...     code='EQS'
+        ... )
+        >>> securities = result['payload']
+        >>>
+        >>> # Fetch stock prices
+        >>> result = intr.get_security_stock_prices(
+        ...     identifier='AAPL',
+        ...     start_date='2024-01-01',
+        ...     frequency='daily'
+        ... )
+        >>> prices = result['stockPrices']
+
+    Advanced direct SDK access:
+        >>> intr = Intrinio(api_key='your_key')
+        >>> # Access Security API directly
+        >>> sec_api = intr._SecurityApi
+        >>> # Use any Intrinio SDK method
+        >>> fundamentals = sec_api.get_security_reported_fundamentals(
+        ...     identifier='AAPL',
+        ...     statement_code='income_statement'
+        ... )
+"""
+
 from chronos_lab import logger
 from chronos_lab.settings import get_settings
 import intrinio_sdk as intrinio
@@ -9,9 +74,93 @@ from datetime import datetime, timedelta
 
 
 class Intrinio:
+    """Low-level wrapper for Intrinio SDK financial data API operations.
+
+    Provides methods for accessing institutional-quality financial data with automatic
+    pagination handling, rate limit management, and error handling. Manages Intrinio
+    SDK configuration and provides access to underlying API objects for advanced usage.
+
+    **NOTE**: This is a low-level class. For typical use cases, prefer high-level
+    functions in chronos_lab.sources module (ohlcv_from_intrinio, securities_from_intrinio).
+
+    Attributes:
+        _config: Intrinio SDK Configuration object
+        _ApiClient: Base API client for request handling. See Intrinio SDK docs for
+            advanced usage: https://docs.intrinio.com/documentation/python
+        _SecurityApi: Security-related API endpoints (prices, fundamentals, ownership)
+        _CompanyApi: Company information API endpoints (filings, news, data points)
+        _StockExchangeApi: Stock exchange and market data API endpoints
+
+    Examples:
+        Basic initialization:
+            >>> from chronos_lab.intrinio import Intrinio
+            >>>
+            >>> # With API key from config file
+            >>> intr = Intrinio()
+            >>>
+            >>> # With explicit API key
+            >>> intr = Intrinio(api_key='your_api_key_here')
+            >>>
+            >>> # With proxy configuration
+            >>> intr = Intrinio(api_key='your_key', proxy='http://proxy:8080')
+
+        Fetch securities list:
+            >>> result = intr.get_all_securities(
+            ...     active=True,
+            ...     delisted=False,
+            ...     code='EQS',
+            ...     composite_mic='USCOMP'
+            ... )
+            >>> if result['statusCode'] == 0:
+            ...     securities = result['payload']
+
+        Fetch daily stock prices:
+            >>> result = intr.get_security_stock_prices(
+            ...     identifier='AAPL',
+            ...     start_date='2024-01-01',
+            ...     end_date='2024-12-31',
+            ...     frequency='daily'
+            ... )
+            >>> prices = result['stockPrices']
+
+        Advanced SDK access:
+            >>> intr = Intrinio()
+            >>> # Access Security API for fundamentals
+            >>> fundamentals = intr._SecurityApi.get_security_reported_fundamentals(
+            ...     identifier='AAPL',
+            ...     statement_code='income_statement',
+            ...     fiscal_year=2024
+            ... )
+            >>> # Access Company API for news
+            >>> news = intr._CompanyApi.get_company_news(
+            ...     identifier='AAPL',
+            ...     page_size=10
+            ... )
+    """
+
     def __init__(self,
                  api_key=None,
                  proxy=None):
+        """Initialize Intrinio SDK with API credentials and configuration.
+
+        Sets up Intrinio SDK configuration and initializes API clients for accessing
+        financial data endpoints.
+
+        Args:
+            api_key: Intrinio API key. If None, reads from INTRINIO_API_KEY in
+                ~/.chronos_lab/.env configuration file.
+            proxy: Optional HTTP proxy URL (e.g., 'http://proxy.example.com:8080').
+
+        Examples:
+            >>> # Use API key from configuration
+            >>> intr = Intrinio()
+            >>>
+            >>> # Provide API key explicitly
+            >>> intr = Intrinio(api_key='your_intrinio_api_key')
+            >>>
+            >>> # With proxy
+            >>> intr = Intrinio(api_key='your_key', proxy='http://proxy:8080')
+        """
         self._config = intrinio.Configuration()
 
         if not api_key:
@@ -32,6 +181,56 @@ class Intrinio:
                        max_number_pages_returned=100,
                        next_page=None,
                        **kwargs):
+        """Fetch all securities with automatic pagination handling.
+
+        Retrieves a comprehensive list of securities from Intrinio API with support for
+        filtering by status, type, exchange, and other criteria. Automatically handles
+        pagination to fetch all matching securities up to the specified page limit.
+
+        Args:
+            max_number_pages_returned: Maximum number of pages to retrieve (default: 100).
+                Each page typically contains 100 securities.
+            next_page: Optional pagination token for resuming from a specific page.
+            **kwargs: Additional filter parameters passed to Intrinio API:
+                - active: True/False to filter by active status
+                - delisted: True/False to filter by delisted status
+                - code: Security type code (e.g., 'EQS' for equity, 'ETF')
+                - composite_mic: Composite MIC code (e.g., 'USCOMP' for US exchanges)
+                - include_non_figi: Include securities without FIGI identifiers
+                - primary_listing: Filter to primary listings only
+                - page_size: Number of securities per page (default: 100)
+
+        Returns:
+            Dictionary with fetch results:
+                - 'statusCode': 0 on success, -1 on error
+                - 'payload': List of security dictionaries with metadata
+
+        Examples:
+            Fetch all US equity securities:
+                >>> intr = Intrinio()
+                >>> result = intr.get_all_securities(
+                ...     active=True,
+                ...     delisted=False,
+                ...     code='EQS',
+                ...     composite_mic='USCOMP',
+                ...     primary_listing=True
+                ... )
+                >>> if result['statusCode'] == 0:
+                ...     securities = result['payload']
+                ...     print(f"Found {len(securities)} securities")
+
+            Fetch ETFs with pagination limit:
+                >>> result = intr.get_all_securities(
+                ...     active=True,
+                ...     code='ETF',
+                ...     max_number_pages_returned=50
+                ... )
+
+        Note:
+            - Automatically handles pagination; continues until no more pages or limit reached
+            - Rate limits apply based on subscription tier
+            - Returns all accumulated data from all pages in single payload
+        """
         response = {
             'statusCode': 0,
             'payload': []
@@ -67,6 +266,84 @@ class Intrinio:
                                   output_df=True,
                                   interval=False,
                                   **kwargs):
+        """Fetch historical or intraday stock prices with automatic pagination and rate limit handling.
+
+        Retrieves OHLCV price data for a security with support for both historical (daily+)
+        and intraday frequencies. Automatically handles pagination and rate limiting (429 errors)
+        with intelligent retry logic.
+
+        Args:
+            max_number_pages_returned: Maximum number of pages to retrieve (default: 100).
+                Each page typically contains 100 price bars.
+            next_page: Optional pagination token for resuming from a specific page.
+            dividend_only: If True, return only dividend information (default: False).
+            split_ratio_only: If True, return only split ratio information (default: False).
+            output_df: If True, return empty DataFrame on error; if False, return
+                response dict (default: True).
+            interval: If True, fetch intraday prices; if False, fetch daily+ prices
+                (default: False).
+            **kwargs: Required and optional parameters for Intrinio API:
+                Required:
+                    - identifier: Security identifier (ticker, FIGI, or Intrinio ID)
+                For historical prices (interval=False):
+                    - frequency: 'daily', 'weekly', 'monthly', 'quarterly', 'yearly'
+                    - start_date: Start date (YYYY-MM-DD)
+                    - end_date: End date (YYYY-MM-DD)
+                For intraday prices (interval=True):
+                    - interval_size: '1m', '5m', '10m', '15m', '30m', '60m', '1h'
+                    - start_date: Start datetime
+                    - end_date: End datetime
+                Optional:
+                    - page_size: Number of records per page (default: 100)
+                    - sort_order: 'asc' or 'desc'
+
+        Returns:
+            If output_df=True: Empty pandas DataFrame on error
+            If output_df=False: Dictionary with:
+                - 'statusCode': 0 on success, -1 on error
+                - 'stockPrices': List of price dictionaries
+                - 'security': Security metadata dictionary
+
+        Examples:
+            Fetch daily prices:
+                >>> intr = Intrinio()
+                >>> result = intr.get_security_stock_prices(
+                ...     identifier='AAPL',
+                ...     start_date='2024-01-01',
+                ...     end_date='2024-12-31',
+                ...     frequency='daily',
+                ...     output_df=False,
+                ...     interval=False
+                ... )
+                >>> if result['statusCode'] == 0:
+                ...     prices = result['stockPrices']
+                ...     security = result['security']
+
+            Fetch intraday 5-minute bars:
+                >>> result = intr.get_security_stock_prices(
+                ...     identifier='SPY',
+                ...     start_date='2024-01-15 09:30:00',
+                ...     end_date='2024-01-15 16:00:00',
+                ...     interval_size='5m',
+                ...     output_df=False,
+                ...     interval=True
+                ... )
+
+            Fetch with automatic rate limit handling:
+                >>> # Rate limits are automatically handled with retry logic
+                >>> result = intr.get_security_stock_prices(
+                ...     identifier='MSFT',
+                ...     start_date='2023-01-01',
+                ...     frequency='daily',
+                ...     output_df=False
+                ... )
+
+        Note:
+            - Automatically retries on 429 (rate limit) errors with intelligent wait
+            - Wait time calculated to next minute boundary plus 5 second buffer
+            - Historical and intraday data use different API endpoints
+            - Pagination continues automatically until all data retrieved
+        """
         response = {
             'statusCode': 0,
             'stockPrices': [],

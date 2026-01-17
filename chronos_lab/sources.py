@@ -1,3 +1,35 @@
+"""Data source connectors for fetching and retrieving OHLCV time series data.
+
+This module provides unified interfaces for fetching OHLCV (Open, High, Low, Close, Volume)
+data from multiple sources including Yahoo Finance, Intrinio API, and ArcticDB storage.
+All functions return data in consistent formats with UTC timezone-aware timestamps.
+
+Typical Usage:
+    Fetch from Yahoo Finance and store in ArcticDB:
+
+        >>> from chronos_lab.sources import ohlcv_from_yfinance
+        >>> from chronos_lab.storage import ohlcv_to_arcticdb
+        >>>
+        >>> # Fetch data
+        >>> prices = ohlcv_from_yfinance(
+        ...     symbols=['AAPL', 'MSFT'],
+        ...     period='1y'
+        ... )
+        >>>
+        >>> # Store for later retrieval
+        >>> ohlcv_to_arcticdb(ohlcv=prices, library_name='yfinance')
+
+    Retrieve stored data with date filtering:
+
+        >>> from chronos_lab.sources import ohlcv_from_arcticdb
+        >>>
+        >>> prices = ohlcv_from_arcticdb(
+        ...     symbols=['AAPL', 'MSFT'],
+        ...     period='3m',
+        ...     library_name='yfinance'
+        ... )
+"""
+
 from chronos_lab import logger
 from chronos_lab.settings import get_settings
 from typing import List, Optional, Dict, Union, Literal
@@ -70,25 +102,84 @@ def ohlcv_from_intrinio(
         output_dict: Optional[bool] = False,
         **kwargs
 ) -> Dict[str, pd.DataFrame] | pd.DataFrame | None:
-    """
-    Download OHLCV data from Intrinio API.
+    """Download OHLCV data from Intrinio API.
+
+    Fetches institutional-quality historical or intraday price data using the Intrinio
+    financial data platform. Requires an active Intrinio API subscription. Data is returned
+    with UTC timezone-aware timestamps in a consistent format.
 
     Args:
-        symbols: List of security identifiers to download.
-        period: Period to download (e.g., 1d, 5d, 1mo, 1y, max).
-            Use either period or start_date.
-        start_date: Start date (YYYY-MM-DD or datetime), inclusive.
-        end_date: End date (YYYY-MM-DD or datetime), exclusive.
-        interval: Data interval. Intraday: 1m, 5m, 10m, 15m, 30m, 60m, 1h.
-            Non-intraday: daily, weekly, monthly, quarterly, yearly. Defaults to 'daily'.
-        api_key: Intrinio API key. If None, read from .env file.
-        output_dict: If True, return dict of DataFrames by symbol.
-            If False, return MultiIndex DataFrame with ('date', 'id') levels.
-        **kwargs: Additional arguments passed to Intrinio API.
+        symbols: List of security identifiers (ticker symbols, CUSIPs, or Intrinio IDs).
+        period: Relative time period (e.g., '1d', '5d', '1mo', '1y').
+            Mutually exclusive with start_date/end_date.
+        start_date: Start date as 'YYYY-MM-DD' string or datetime object (inclusive).
+            Mutually exclusive with period.
+        end_date: End date as 'YYYY-MM-DD' string or datetime object (exclusive).
+            Defaults to current time if start_date is provided without end_date.
+        interval: Data frequency interval. Options:
+            - Intraday: '1m', '5m', '10m', '15m', '30m', '60m', '1h'
+            - Historical: 'daily', 'weekly', 'monthly', 'quarterly', 'yearly'
+            Defaults to 'daily'.
+        api_key: Intrinio API key. If None, reads from INTRINIO_API_KEY in
+            ~/.chronos_lab/.env configuration file.
+        output_dict: If True, returns dict mapping symbols to DataFrames.
+            If False, returns single MultiIndex DataFrame with (date, id) levels.
+            Defaults to False.
+        **kwargs: Additional keyword arguments passed to Intrinio SDK
+            (e.g., frequency, sort_order).
 
     Returns:
-        Dict of DataFrames (if output_dict=True), MultiIndex DataFrame (if False),
-        or None on error.
+        If output_dict=True: Dictionary mapping ticker symbols to DataFrames, where each
+            DataFrame has DatetimeIndex and columns ['id', 'open', 'high', 'low', 'close',
+            'volume', 'interval' (intraday only), 'symbol' (if ticker differs from id)].
+        If output_dict=False: Single DataFrame with MultiIndex (date, id) and same columns.
+        Returns None if no data could be retrieved or on error.
+
+    Raises:
+        None: Errors are logged but not raised. Check return value for None.
+
+    Examples:
+        Fetch daily data with API key:
+            >>> prices = ohlcv_from_intrinio(
+            ...     symbols=['AAPL', 'MSFT'],
+            ...     start_date='2024-01-01',
+            ...     interval='daily',
+            ...     api_key='your_api_key_here'
+            ... )
+            >>> # Returns MultiIndex DataFrame with (date, id) levels
+
+        Fetch data using configuration file:
+            >>> # First set INTRINIO_API_KEY in ~/.chronos_lab/.env
+            >>> prices = ohlcv_from_intrinio(
+            ...     symbols=['AAPL', 'MSFT'],
+            ...     period='1y',
+            ...     interval='daily'
+            ... )
+
+        Get intraday 5-minute bars:
+            >>> intraday = ohlcv_from_intrinio(
+            ...     symbols=['SPY'],
+            ...     start_date='2024-01-15',
+            ...     end_date='2024-01-16',
+            ...     interval='5m'
+            ... )
+            >>> # Includes 'interval' column for intraday data
+
+        Get data as dictionary by symbol:
+            >>> prices_dict = ohlcv_from_intrinio(
+            ...     symbols=['AAPL', 'MSFT', 'GOOGL'],
+            ...     period='3mo',
+            ...     interval='daily',
+            ...     output_dict=True
+            ... )
+            >>> aapl_df = prices_dict['AAPL']
+
+    Note:
+        - Requires active Intrinio subscription with appropriate data access
+        - API rate limits apply based on subscription tier
+        - Intraday data availability depends on subscription level
+        - All timestamps are converted to UTC timezone
+        - Symbol identifiers can be tickers, CUSIPs, or Intrinio composite IDs
     """
     from chronos_lab.intrinio import Intrinio
 
@@ -165,23 +256,78 @@ def ohlcv_from_yfinance(
         output_dict: Optional[bool] = False,
         **kwargs
 ) -> Dict[str, pd.DataFrame] | pd.DataFrame | None:
-    """
-    Download OHLCV data from Yahoo Finance.
+    """Download OHLCV data from Yahoo Finance.
+
+    Fetches historical or intraday price data for multiple symbols using the yfinance library.
+    Data is returned with UTC timezone-aware timestamps in a consistent format suitable for
+    analysis or storage.
 
     Args:
-        symbols: List of symbols to download (max 100).
-        period: Period to download (e.g., 1d, 5d, 1mo, 1y, max).
-            Use either period or start_date.
-        start_date: Start date (YYYY-MM-DD or datetime), inclusive.
-        end_date: End date (YYYY-MM-DD or datetime), exclusive.
-        interval: Data interval (e.g., 1m, 1h, 1d, 1wk). Defaults to '1d'.
-        output_dict: If True, return dict of DataFrames by symbol.
-            If False, return MultiIndex DataFrame with ('date', 'symbol') levels.
-        **kwargs: Additional arguments passed to yfinance.download().
+        symbols: List of ticker symbols to download (max 100 symbols per call).
+        period: Relative time period (e.g., '1d', '5d', '1mo', '3mo', '1y', 'max').
+            Mutually exclusive with start_date/end_date.
+        start_date: Start date as 'YYYY-MM-DD' string or datetime object (inclusive).
+            Mutually exclusive with period.
+        end_date: End date as 'YYYY-MM-DD' string or datetime object (exclusive).
+            Defaults to current time if start_date is provided without end_date.
+        interval: Data frequency interval. Options include:
+            - Intraday: '1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h'
+            - Daily+: '1d', '5d', '1wk', '1mo', '3mo'
+            Defaults to '1d' (daily).
+        output_dict: If True, returns dict mapping symbols to DataFrames.
+            If False, returns single MultiIndex DataFrame with (date, symbol) levels.
+            Defaults to False.
+        **kwargs: Additional keyword arguments passed to yfinance.download().
 
     Returns:
-        Dict of DataFrames (if output_dict=True), MultiIndex DataFrame (if False),
-        or None on error.
+        If output_dict=True: Dictionary mapping symbol strings to DataFrames, where each
+            DataFrame has DatetimeIndex and columns ['open', 'high', 'low', 'close',
+            'volume', 'symbol', 'interval' (intraday only)].
+        If output_dict=False: Single DataFrame with MultiIndex (date, symbol) and same columns.
+        Returns None if no data could be retrieved or on error.
+
+    Raises:
+        None: Errors are logged but not raised. Check return value for None.
+
+    Examples:
+        Basic daily data fetch:
+            >>> prices = ohlcv_from_yfinance(
+            ...     symbols=['AAPL', 'MSFT', 'GOOGL'],
+            ...     period='1y'
+            ... )
+            >>> print(prices.head())
+            >>> # Returns MultiIndex DataFrame with (date, symbol) levels
+
+        Fetch specific date range:
+            >>> prices = ohlcv_from_yfinance(
+            ...     symbols=['AAPL', 'MSFT'],
+            ...     start_date='2024-01-01',
+            ...     end_date='2024-12-31',
+            ...     interval='1d'
+            ... )
+
+        Get 5-minute intraday bars:
+            >>> intraday = ohlcv_from_yfinance(
+            ...     symbols=['SPY', 'QQQ'],
+            ...     period='1d',
+            ...     interval='5m'
+            ... )
+            >>> # Includes 'interval' column for intraday data
+
+        Get data as dictionary by symbol:
+            >>> prices_dict = ohlcv_from_yfinance(
+            ...     symbols=['AAPL', 'MSFT'],
+            ...     period='6mo',
+            ...     output_dict=True
+            ... )
+            >>> aapl_df = prices_dict['AAPL']
+            >>> # Work with individual symbol DataFrames
+
+    Note:
+        - Yahoo Finance has rate limits; avoid excessive requests
+        - Intraday data availability is limited (typically last 7-60 days depending on interval)
+        - Max 100 symbols per call to avoid timeout issues
+        - All timestamps are converted to UTC timezone
     """
     import yfinance as yf
 
@@ -297,28 +443,97 @@ def ohlcv_from_arcticdb(
         pivot: bool = False,
         group_by: Optional[Literal["column", "symbol"]] = "column",
 ) -> Optional[pd.DataFrame]:
-    """
-    Retrieve historical or intraday stock price data from ArcticDB.
+    """Retrieve historical or intraday OHLCV data from ArcticDB storage.
 
-    Returns DataFrame with MultiIndex (date, symbol) by default, or wide format
-    with pivoted symbols when pivot=True.
+    Queries previously stored time series data from ArcticDB with flexible date filtering
+    and output formatting options. Supports both long format (MultiIndex) and wide format
+    (pivoted) for different analysis workflows.
 
     Args:
-        symbols: List of ticker symbols (e.g., ['AAPL', 'MSFT'])
-        start_date: Start date (ISO string or pd.Timestamp). Mutually exclusive with period.
-        end_date: End date (ISO string or pd.Timestamp). Defaults to current UTC time if not specified.
-        period: Relative period ('5d', '3m', '1y'). Mutually exclusive with start_date/end_date.
-        columns: Columns to retrieve. 'symbol' column is always included automatically.
-        library_name: ArcticDB library name (default from ~/.chronos_lab/.env)
-        pivot: If True, reshape to wide format with symbols unstacked
-        group_by: When pivoting, controls column MultiIndex order:
-                  'column' (default) - (column, symbol) ordering
-                  'symbol' - (symbol, column) ordering
+        symbols: List of ticker symbols to retrieve (e.g., ['AAPL', 'MSFT', 'GOOGL']).
+        start_date: Start date as 'YYYY-MM-DD' string or pd.Timestamp (inclusive).
+            Mutually exclusive with period.
+        end_date: End date as 'YYYY-MM-DD' string or pd.Timestamp (exclusive).
+            Defaults to current UTC time if not specified.
+        period: Relative time period (e.g., '5d', '3m', '1y').
+            Mutually exclusive with start_date/end_date.
+        columns: List of specific columns to retrieve (e.g., ['close', 'volume']).
+            The 'symbol' column is always included automatically. If None, all columns
+            are retrieved.
+        library_name: ArcticDB library name to query. If None, uses
+            ARCTICDB_DEFAULT_LIBRARY_NAME from ~/.chronos_lab/.env configuration.
+        pivot: If True, reshape to wide format with symbols as columns.
+            If False (default), return long format with MultiIndex (date, symbol).
+        group_by: When pivot=True, controls column ordering in MultiIndex:
+            - 'column' (default): Creates (column, symbol) ordering (e.g., close_AAPL, close_MSFT)
+            - 'symbol': Creates (symbol, column) ordering (e.g., AAPL_close, AAPL_high)
 
     Returns:
-        DataFrame with MultiIndex (date, symbol) if pivot=False, or
-        DataFrame with DatetimeIndex and MultiIndex columns if pivot=True.
-        Returns None if no data found or if both period and start_date/end_date are specified.
+        If pivot=False: DataFrame with MultiIndex (date, symbol) and columns
+            ['open', 'high', 'low', 'close', 'volume', ...].
+        If pivot=True: DataFrame with DatetimeIndex and MultiIndex columns
+            organized by group_by parameter.
+        Returns None if no data found, invalid parameters, or on error.
+
+    Raises:
+        None: Errors are logged but not raised. Check return value for None.
+
+    Examples:
+        Basic retrieval with relative period:
+            >>> from chronos_lab.sources import ohlcv_from_arcticdb
+            >>>
+            >>> prices = ohlcv_from_arcticdb(
+            ...     symbols=['AAPL', 'MSFT', 'GOOGL'],
+            ...     period='3m',
+            ...     library_name='yfinance'
+            ... )
+            >>> print(prices.head())
+            >>> # Returns MultiIndex (date, symbol) DataFrame
+
+        Specify exact date range:
+            >>> prices = ohlcv_from_arcticdb(
+            ...     symbols=['AAPL', 'MSFT'],
+            ...     start_date='2024-01-01',
+            ...     end_date='2024-12-31',
+            ...     library_name='yfinance'
+            ... )
+
+        Retrieve only specific columns:
+            >>> closes = ohlcv_from_arcticdb(
+            ...     symbols=['AAPL', 'MSFT', 'GOOGL'],
+            ...     period='1y',
+            ...     columns=['close'],
+            ...     library_name='yfinance'
+            ... )
+            >>> # Returns only 'close' and 'symbol' columns
+
+        Pivot to wide format for correlation analysis:
+            >>> wide_prices = ohlcv_from_arcticdb(
+            ...     symbols=['AAPL', 'MSFT', 'GOOGL', 'AMZN'],
+            ...     period='1y',
+            ...     columns=['close'],
+            ...     library_name='yfinance',
+            ...     pivot=True,
+            ...     group_by='column'
+            ... )
+            >>> # Creates columns: close_AAPL, close_MSFT, etc.
+            >>> returns = wide_prices.pct_change()
+            >>> correlation_matrix = returns.corr()
+
+        Alternative pivot grouping by symbol:
+            >>> wide_prices = ohlcv_from_arcticdb(
+            ...     symbols=['AAPL', 'MSFT'],
+            ...     period='6mo',
+            ...     pivot=True,
+            ...     group_by='symbol'
+            ... )
+            >>> # Creates MultiIndex: (AAPL, close), (AAPL, high), (MSFT, close), etc.
+
+    Note:
+        - Period strings: '7d' (days), '4w' (weeks), '3mo'/'3m' (months), '1y' (years)
+        - All timestamps are UTC timezone-aware
+        - Data must have been previously stored using ohlcv_to_arcticdb()
+        - Empty result returns None with warning logged
     """
 
     from chronos_lab.arcdb import ArcDB
