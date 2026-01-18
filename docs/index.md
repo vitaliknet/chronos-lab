@@ -1,183 +1,91 @@
-# Chronos Lab
+# Welcome to Chronos Lab
 
-A lightweight Python library for time series analysis with a modular architecture. Install only what you need—from minimal data fetching to full-featured storage and MCP server capabilities.
+A lightweight Python library for time series financial data analysis with modular architecture.
 
-## Features
+## Quick Links
 
-- **Modular Design**: Install only the features you need via optional extras
-- **Multiple Data Sources**: Yahoo Finance (yfinance) and Intrinio API integration
-- **High-Performance Storage**: ArcticDB time series database with versioning support
-- **MCP Server**: Model Context Protocol server capabilities (coming soon)
-- **Type-Safe**: Built with Pydantic for configuration management
-- **Well-Documented**: Comprehensive docstrings and examples
+<div class="grid cards" markdown>
 
-## Installation
+-   :material-rocket-launch:{ .lg .middle } __Getting Started__
 
-chronos-lab requires Python 3.12+, tested to run on macOS and Linux.
+    ---
 
-### Core Installation
+    Install chronos-lab and build your first data pipeline
 
-Install the minimal package with just NumPy, pandas, and Pydantic:
+    [:octicons-arrow-right-24: Installation & Quick Start](getting-started.md)
 
-```bash
-uv pip install chronos-lab
-```
+-   :material-cog:{ .lg .middle } __Configuration__
 
-or with pip:
+    ---
 
-```bash
-pip install chronos-lab
-```
+    Configure API keys, storage backends, and environment settings
 
-### Installation with Extras
+    [:octicons-arrow-right-24: Configuration Guide](configuration.md)
 
-chronos-lab follows a modular design—install additional features as needed:
+-   :material-book-open:{ .lg .middle } __API Reference__
 
-=== "Data Sources"
+    ---
 
-    ```bash
-    # Yahoo Finance for quick market data analysis
-    uv pip install chronos-lab[yfinance]
+    Complete documentation for all functions and classes
 
-    # Intrinio for professional financial data
-    uv pip install chronos-lab[intrinio]
-    ```
+    [:octicons-arrow-right-24: Browse API Docs](api/index.md)
 
-=== "Storage & Infrastructure"
+-   :material-code-braces:{ .lg .middle } __Examples__
 
-    ```bash
-    # ArcticDB for high-performance time series storage
-    uv pip install chronos-lab[arcticdb]
+    ---
 
-    # MCP server capabilities
-    uv pip install chronos-lab[mcp]
-    ```
+    Real-world patterns and workflows
 
-=== "Combined"
+    [:octicons-arrow-right-24: View Examples](examples.md)
 
-    ```bash
-    # Simple use case: yfinance for on-the-fly analysis
-    uv pip install chronos-lab[yfinance]
+</div>
 
-    # Advanced use case: ArcticDB and S3
-    uv pip install chronos-lab[arcticdb,aws]
+## Key Features
 
-    # All features
-    uv pip install chronos-lab[yfinance,intrinio,arcticdb,aws]
-    ```
+**Modular Design**
+: Install only what you need via optional extras (yfinance, intrinio, arcticdb, aws)
 
-### Development Installation
+**Multiple Data Sources**
+: Yahoo Finance for quick analysis, Intrinio for institutional data
 
-```bash
-git clone https://github.com/vitaliknet/chronos-lab.git
-cd chronos-lab
+**High-Performance Storage**
+: ArcticDB for time series, datasets for structured metadata
 
-# Install with all extras
-uv sync --all-extras
+**Intraday Support**
+: 1m, 5m, 15m, 1h bars for algorithmic trading and backtesting
 
-# Or install with specific extras only
-uv sync --extra yfinance --extra mcp
-```
+**Distributed Workflows**
+: S3 backend for ArcticDB, DynamoDB for multi-process dataset coordination
 
-## Quick Start
+**Type-Safe Configuration**
+: Pydantic-based settings with environment variable overrides
 
-### Fetching Market Data
-
-```python
-from chronos_lab.sources import ohlcv_from_yfinance
-
-# Download last year of daily data
-prices = ohlcv_from_yfinance(
-    symbols=['AAPL', 'MSFT', 'GOOGL'],
-    period='1y'
-)
-
-# Or specify exact dates
-prices = ohlcv_from_yfinance(
-    symbols=['AAPL', 'MSFT'],
-    start_date='2024-01-01',
-    end_date='2024-12-31',
-    interval='1d'
-)
-```
-
-Returns a MultiIndex DataFrame with `(date, symbol)` levels for easy multi-symbol analysis.
-
-### Persistent Storage with ArcticDB
+## Quick Example
 
 ```python
 from chronos_lab.sources import ohlcv_from_yfinance
 from chronos_lab.storage import ohlcv_to_arcticdb
 
-# Fetch and store in one workflow
-prices = ohlcv_from_yfinance(
-    symbols=['AAPL', 'MSFT', 'GOOGL', 'AMZN'],
-    period='1y'
-)
+# Fetch data
+prices = ohlcv_from_yfinance(symbols=['AAPL', 'MSFT'], period='1y')
 
-ohlcv_to_arcticdb(
-    ohlcv=prices,
-    library_name='yfinance',
-    adb_mode='write'
-)
+# Store for later
+ohlcv_to_arcticdb(ohlcv=prices, library_name='yfinance')
 ```
 
-### Reading from ArcticDB
-
-```python
-from chronos_lab.sources import ohlcv_from_arcticdb
-
-# Get last 3 months of data
-prices = ohlcv_from_arcticdb(
-    symbols=['AAPL', 'MSFT', 'GOOGL', 'AMZN'],
-    period='3m',
-    library_name='yfinance'
-)
-
-# Transform to wide format for correlation analysis
-wide_prices = ohlcv_from_arcticdb(
-    symbols=['AAPL', 'MSFT', 'GOOGL', 'AMZN'],
-    period='1y',
-    columns=['close'],
-    library_name='yfinance',
-    pivot=True,
-    group_by='column'  # Results in: close_AAPL, close_MSFT, etc.
-)
-
-# Calculate returns matrix
-returns = wide_prices.pct_change()
-correlation_matrix = returns.corr()
-```
-
-## Configuration
-
-On first import of chronos-lab (e.g., `import chronos_lab` or `from chronos_lab.sources import ...`), the package automatically creates `~/.chronos_lab/.env` with default settings. This file can be edited to configure API keys, storage paths, and other options:
+## Installation
 
 ```bash
-# View or edit configuration
-nano ~/.chronos_lab/.env
+# Quick start
+uv pip install chronos-lab[yfinance,arcticdb]
+
+# With Intrinio
+uv pip install chronos-lab[yfinance,intrinio,arcticdb]
+
+# With AWS support
+uv pip install chronos-lab[yfinance,arcticdb,aws]
 ```
 
-The configuration file includes settings for data sources (Intrinio API), storage backends (ArcticDB local/S3), and logging levels. All settings can also be overridden via environment variables.
+---
 
-See the [Configuration Guide](configuration.md) for detailed setup instructions.
-
-## Architecture
-
-chronos-lab is organized into modular components:
-
-- **[Data Sources](api/sources.md)**: High-level functions for fetching data from Yahoo Finance, Intrinio, and ArcticDB
-- **[Storage](api/storage.md)**: Operations for persisting data to ArcticDB
-- **[Settings](api/settings.md)**: Configuration management using Pydantic Settings
-- **[Low-Level APIs](api/arcdb.md)**: Direct access to ArcticDB and Intrinio SDK for advanced use cases
-
-## Next Steps
-
-- [Getting Started Guide](getting-started.md) - Detailed walkthrough
-- [Configuration](configuration.md) - Setup and configuration options
-- [API Reference](api/index.md) - Complete API documentation
-- [Examples](examples.md) - Real-world usage examples
-
-## License
-
-MIT License - see [LICENSE](https://github.com/vitaliknet/chronos-lab/blob/main/LICENSE) for details.
+**Ready to dive in?** Start with the [Getting Started Guide](getting-started.md)

@@ -331,13 +331,8 @@ def ohlcv_from_yfinance(
     """
     import yfinance as yf
 
-    response = {
-        'statusCode': 0,
-    }
-
     if period is None and start_date is None:
         logger.error("Either start_date or period must be specified")
-        response['statusCode'] = -1
         return None
 
     intraday_intervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']
@@ -345,7 +340,6 @@ def ohlcv_from_yfinance(
 
     if len(symbols) > 100:
         logger.error('symbols size exceeds 100 symbols. Please limit to 100 symbols per invocation.')
-        response['statusCode'] = -1
         return None
 
     secs_prices_dict = {}
@@ -367,7 +361,6 @@ def ohlcv_from_yfinance(
 
         if yf_df.empty:
             logger.error('No data returned from Yahoo Finance')
-            response['statusCode'] = -1
             return None
 
         for symbol in symbols:
@@ -419,12 +412,10 @@ def ohlcv_from_yfinance(
 
     except Exception as e:
         logger.error('Failed to download data from Yahoo Finance: %s', str(e))
-        response['statusCode'] = -1
         return None
 
     if len(secs_prices_dict) == 0:
         logger.error('No data retrieved for any symbols')
-        response['statusCode'] = -1
         return None
 
     if output_dict:
@@ -591,6 +582,68 @@ def ohlcv_from_arcticdb(
         return None
 
 
+def from_dataset(
+        *,
+        dataset_name: str,
+        output_dict: Optional[bool] = False,
+) -> Dict[str, pd.DataFrame] | pd.DataFrame | None:
+    """Retrieve a dataset from local JSON file or DynamoDB table.
+
+    Loads structured datasets stored locally or in DynamoDB. Returns data as either
+    a pandas DataFrame (with automatic type inference) or as a dictionary.
+
+    Args:
+        dataset_name: Dataset identifier. Use 'ddb_' prefix for DynamoDB datasets,
+            no prefix for local JSON files.
+        output_dict: If True, returns dictionary format. If False (default), returns
+            pandas DataFrame with type inference.
+
+    Returns:
+        If output_dict=False: pandas DataFrame with inferred datetime and numeric types
+        If output_dict=True: Dictionary mapping keys to item attribute dicts
+        Returns None on error.
+
+    Examples:
+        Load local dataset as DataFrame:
+            >>> from chronos_lab.sources import from_dataset
+            >>>
+            >>> df = from_dataset(dataset_name='example')
+            >>> print(df.head())
+            >>> print(df.dtypes)
+
+        Load DynamoDB dataset as DataFrame:
+            >>> df = from_dataset(dataset_name='ddb_securities')
+            >>> # Automatically infers datetime and numeric types
+
+        Load as dictionary:
+            >>> data_dict = from_dataset(
+            ...     dataset_name='example',
+            ...     output_dict=True
+            ... )
+            >>> for key, item in data_dict.items():
+            ...     print(f"{key}: {item}")
+
+    Note:
+        - Local datasets: Loaded from {DATASET_LOCAL_PATH}/{name}.json
+        - DynamoDB datasets: Require DATASET_DDB_TABLE_NAME and DATASET_DDB_MAP configuration
+        - DataFrame index is the dataset keys (local) or sort keys (DynamoDB)
+        - Datetime strings matching ISO format automatically converted to pandas datetime
+        - Numeric strings automatically converted to numeric types
+    """
+    from chronos_lab.dataset import Dataset
+
+    ds = Dataset()
+
+    if output_dict:
+        results = ds.get_dataset(dataset_name=dataset_name)
+        if results['statusCode'] == 0:
+            return results['payload']
+        else:
+            return None
+    else:
+        return ds.get_datasetDF(dataset_name=dataset_name)
+
+
 def _period(period: str, as_of: Optional[pd.Timestamp] = None) -> tuple[pd.Timestamp, pd.Timestamp]:
     """Convert period string to date range tuple.
 
@@ -625,8 +678,9 @@ def _period(period: str, as_of: Optional[pd.Timestamp] = None) -> tuple[pd.Times
 
 
 __all__ = [
+    'from_dataset',
     'ohlcv_from_intrinio',
     'ohlcv_from_yfinance',
     'ohlcv_from_arcticdb',
-    'securities_from_intrinio'
+    'securities_from_intrinio',
 ]

@@ -27,7 +27,7 @@ Typical Usage:
 
 from chronos_lab import logger
 from chronos_lab.settings import get_settings
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 import pandas as pd
 
 
@@ -174,6 +174,54 @@ def ohlcv_to_arcticdb(
     return response
 
 
+def to_dataset(dataset_name: str,
+               dataset: Dict[str, Any]) -> Dict[str, int]:
+    """Save a dataset to local JSON file or DynamoDB table.
+
+    Stores structured dataset dictionary based on naming convention. Automatically
+    creates parent directories for local storage if needed.
+
+    Args:
+        dataset_name: Dataset identifier. Use 'ddb_' prefix for DynamoDB datasets,
+            no prefix for local JSON files.
+        dataset: Dictionary mapping keys to item attribute dictionaries
+
+    Returns:
+        Dictionary with 'statusCode': 0 on success, -1 on failure
+
+    Examples:
+        Save to local JSON file:
+            >>> from chronos_lab.storage import to_dataset
+            >>>
+            >>> data = {
+            ...     'AAPL': {'name': 'Apple Inc.', 'sector': 'Technology', 'price': 175.50},
+            ...     'MSFT': {'name': 'Microsoft', 'sector': 'Technology', 'price': 420.00}
+            ... }
+            >>> result = to_dataset(dataset_name='tech_stocks', dataset=data)
+            >>> if result['statusCode'] == 0:
+            ...     print("Dataset saved successfully")
+
+        Save to DynamoDB:
+            >>> data = {
+            ...     'security1': {'ticker': 'AAPL', 'exchange': 'NASDAQ'},
+            ...     'security2': {'ticker': 'MSFT', 'exchange': 'NASDAQ'}
+            ... }
+            >>> result = to_dataset(dataset_name='ddb_securities', dataset=data)
+
+    Note:
+        - Local datasets: Saved to {DATASET_LOCAL_PATH}/{name}.json
+        - DynamoDB datasets: Require DATASET_DDB_TABLE_NAME and DATASET_DDB_MAP configuration
+        - DynamoDB items automatically get 'pk' and 'sk' keys from dataset map
+        - Datetime objects serialized as ISO strings
+        - Local file parent directories created automatically
+    """
+    from chronos_lab.dataset import Dataset
+
+    ds = Dataset()
+    return ds.save_dataset(dataset_name, dataset)
+
+
 __all__ = [
-    'ohlcv_to_arcticdb'
+    'ohlcv_to_arcticdb',
+    'to_dataset'
 ]

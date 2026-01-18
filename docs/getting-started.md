@@ -102,13 +102,22 @@ print(f"\nAAPL data shape: {aapl.shape}")
 
 ### Adding Persistent Storage
 
+chronos-lab provides two types of persistent storage, each optimized for different data:
+
+- **ArcticDB**: High-performance time series storage for OHLCV price data
+- **Datasets**: Structured data storage for portfolio composition, watchlists, security metadata, etc.
+
+**Important**: Use ArcticDB for time series data and datasets for structured/metadata.
+
+#### Storing Time Series Data (ArcticDB)
+
 Install ArcticDB support if you haven't already:
 
 ```bash
 uv pip install chronos-lab[arcticdb]
 ```
 
-Now store your data for later use:
+Now store your time series data for later use:
 
 ```python
 from chronos_lab.sources import ohlcv_from_yfinance
@@ -133,7 +142,81 @@ else:
     print(f"⚠ Some symbols failed: {result.get('skipped_symbols', [])}")
 ```
 
+#### Storing Structured Datasets
+
+Datasets are ideal for storing structured data needed in your research workflows:
+
+- **Portfolio composition**: Holdings, weights, rebalance dates
+- **Watchlists**: Custom symbol lists, sector groupings
+- **Index composition**: S&P 500 constituents, sector mappings
+- **Security metadata**: Company names, exchanges, sectors, market caps
+
+Store datasets locally as JSON files or to DynamoDB for distributed workflows:
+
+```python
+from chronos_lab.sources import securities_from_intrinio
+from chronos_lab.storage import to_dataset
+
+# Example 1: Store security metadata from Intrinio
+securities = securities_from_intrinio()
+
+# Store as local dataset
+result = to_dataset(
+    dataset_name='securities_intrinio',
+    dataset=securities.to_dict(orient='index')
+)
+
+# Example 2: Store portfolio composition
+portfolio = {
+    'AAPL': {'weight': 0.30, 'shares': 100, 'sector': 'Technology'},
+    'MSFT': {'weight': 0.25, 'shares': 50, 'sector': 'Technology'},
+    'JPM': {'weight': 0.20, 'shares': 75, 'sector': 'Financials'},
+    'JNJ': {'weight': 0.15, 'shares': 60, 'sector': 'Healthcare'},
+    'XOM': {'weight': 0.10, 'shares': 80, 'sector': 'Energy'}
+}
+
+result = to_dataset(
+    dataset_name='my_portfolio',
+    dataset=portfolio
+)
+
+# Example 3: Store custom watchlist
+watchlist = {
+    'tech_leaders': {
+        'symbols': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA'],
+        'description': 'Large-cap technology leaders',
+        'created': '2024-01-15'
+    },
+    'dividend_stocks': {
+        'symbols': ['JNJ', 'PG', 'KO', 'PEP', 'MCD'],
+        'description': 'Dividend aristocrats',
+        'created': '2024-01-15'
+    }
+}
+
+result = to_dataset(
+    dataset_name='watchlists',
+    dataset=watchlist
+)
+
+if result['statusCode'] == 0:
+    print("✓ Dataset stored successfully!")
+```
+
+**Distributed Workflows**: In production environments, independent processes can write datasets to DynamoDB (use `ddb_` prefix), and other processes can read them with `from_dataset()`. Configure DynamoDB in `~/.chronos_lab/.env`:
+
+```bash
+# Dataset Settings
+DATASET_LOCAL_PATH=~/.chronos_lab/datasets
+DATASET_DDB_TABLE_NAME=my-datasets-table
+DATASET_DDB_MAP='{"ddb_securities": {"pk": "DATASET#securities", "sk": "ticker"}}'
+```
+
 ### Reading Stored Data
+
+#### Reading Time Series Data (ArcticDB)
+
+Retrieve OHLCV time series data from ArcticDB with flexible date filtering and pivoting:
 
 ```python
 from chronos_lab.sources import ohlcv_from_arcticdb
@@ -165,6 +248,56 @@ wide_prices = ohlcv_from_arcticdb(
 
 print(wide_prices.head())
 ```
+
+#### Reading Structured Datasets
+
+Retrieve structured datasets that were stored with `to_dataset()`:
+
+```python
+from chronos_lab.sources import from_dataset
+import pandas as pd
+
+# Example 1: Read portfolio composition
+portfolio_df = from_dataset(dataset_name='my_portfolio')
+print("Portfolio Composition:")
+print(portfolio_df)
+print(f"\nTotal weight: {portfolio_df['weight'].sum()}")
+print(f"Sector allocation:\n{portfolio_df.groupby('sector')['weight'].sum()}")
+
+# Example 2: Read watchlists for analysis
+watchlists = from_dataset(
+    dataset_name='watchlists',
+    output_dict=True  # Get as dictionary
+)
+
+# Use watchlist symbols to fetch prices
+tech_symbols = watchlists['tech_leaders']['symbols']
+prices = ohlcv_from_arcticdb(
+    symbols=tech_symbols,
+    period='1y',
+    library_name='yfinance'
+)
+
+# Example 3: Read security metadata
+securities = from_dataset(dataset_name='securities_metadata')
+print(f"\nTotal securities: {len(securities)}")
+print(f"Exchanges: {securities['exchange'].unique()}")
+
+# Example 4: Read from DynamoDB (distributed workflows)
+# In a distributed environment, one process writes datasets to DynamoDB
+# and other processes read them
+ddb_securities = from_dataset(dataset_name='ddb_securities')
+print(f"\nDynamoDB securities: {len(ddb_securities)}")
+```
+
+**Use Cases for Datasets**:
+
+- **Research workflows**: Load portfolio composition, then fetch prices for those symbols
+- **Backtesting**: Store universe definitions, rebalance schedules, or factor definitions
+- **Distributed systems**: One process updates security master details in DynamoDB, multiple processes read it
+- **Configuration management**: Store strategy parameters, risk limits, or trading schedules
+
+**Remember**: Datasets are for structured/metadata, not time series. Always use ArcticDB for OHLCV price data.
 
 ## Using Intrinio Data
 

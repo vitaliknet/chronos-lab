@@ -1,229 +1,161 @@
 # chronos-lab
 
-A lightweight Python library for time series analysis with a modular architecture. Install only what you need—from minimal data fetching to full-featured storage and MCP server capabilities.
+A lightweight Python library for time series financial data analysis with modular architecture. Install only what you need—from minimal data fetching to full-featured storage capabilities.
+
+## Features
+
+✨ **Modular Design**: Install only what you need with optional extras
+📊 **Multiple Data Sources**: Yahoo Finance (free) and Intrinio (institutional)
+⚡ **High-Performance Storage**: ArcticDB for time series, datasets for metadata
+🔄 **Flexible Outputs**: MultiIndex DataFrames or symbol dictionaries
+📈 **Intraday Support**: 1m, 5m, 15m, 1h bars for algorithmic trading
+🌐 **Distributed Workflows**: DynamoDB datasets for multi-process coordination
 
 **[📚 Read the full documentation](https://vitaliknet.github.io/chronos-lab/)**
 
 ## Installation
 
-chronos-lab requires Python 3.12+ and runs on macOS and Linux.
-
-### Core Installation
-
-Install the minimal package with just NumPy, pandas, and Pydantic:
+Requires Python 3.12+ on macOS or Linux.
 
 ```bash
-uv pip install chronos-lab
-```
-
-or with pip:
-
-```bash
-pip install chronos-lab
-```
-
-### Installation with Extras
-
-chronos-lab follows a modular design—install additional features as needed:
-
-#### Data Sources
-
-```bash
-# Yahoo Finance for quick market data analysis
+# Quick start: Yahoo Finance only
 uv pip install chronos-lab[yfinance]
 
-# Intrinio for professional financial data
-uv pip install chronos-lab[intrinio]
+# With persistence: Add ArcticDB storage
+uv pip install chronos-lab[yfinance,arcticdb]
+
+# Professional: Add Intrinio data
+uv pip install chronos-lab[yfinance,intrinio,arcticdb]
+
+# With AWS: Add S3 and DynamoDB support
+uv pip install chronos-lab[yfinance,arcticdb,aws]
 ```
 
-#### Storage & Infrastructure
-
+Or with pip:
 ```bash
-# ArcticDB for high-performance time series storage
-uv pip install chronos-lab[arcticdb]
-
-# MCP server capabilities
-uv pip install chronos-lab[mcp]
-```
-
-#### Combined Installations
-
-```bash
-# Simple use case: yfinance for on-the-fly analysis
-uv pip install chronos-lab[yfinance]
-
-# Advanced use case: MCP server with ArcticDB and S3
-uv pip install chronos-lab[mcp,arcticdb]
-
-# All features
-uv pip install chronos-lab[yfinance,intrinio,arcticdb,mcp]
-```
-
-### Development Installation
-
-```bash
-git clone https://github.com/yourusername/chronos-lab.git
-cd chronos-lab
-
-# Install with all extras
-uv sync --all-extras
-
-# Or install with specific extras only
-uv sync --extra yfinance --extra mcp
+pip install chronos-lab[yfinance,arcticdb]
 ```
 ## Configuration
 
-On first import of chronos-lab (e.g., `import chronos_lab` or `from chronos_lab.sources import ...`), the package automatically creates `~/.chronos_lab/.env` with default settings. This file can be edited to configure API keys, storage paths, and other options:
+On first import, chronos-lab creates `~/.chronos_lab/.env` with default settings:
 
 ```bash
-# View or edit configuration
+# Edit configuration
 nano ~/.chronos_lab/.env
 ```
 
-The configuration file includes settings for data sources (Intrinio API), storage backends (ArcticDB local/S3), and logging levels. All settings can also be overridden via environment variables.
+Configure API keys (Intrinio), storage paths (ArcticDB, datasets), and logging. All settings support environment variable overrides. See the [Configuration Guide](https://vitaliknet.github.io/chronos-lab/configuration/) for details.
 ## Quick Start
 
-## Fetching Market Data
+### Fetching Market Data
 
-### Yahoo Finance: OHLCV Time Series
-
-Get daily price data for multiple symbols with minimal setup:
+Get daily or intraday price data with one line:
 
 ```python
 from chronos_lab.sources import ohlcv_from_yfinance
 
-# Download last year of daily data
+# Daily data for the last year
 prices = ohlcv_from_yfinance(
     symbols=['AAPL', 'MSFT', 'GOOGL'],
     period='1y'
 )
 
-# Or specify exact dates
-prices = ohlcv_from_yfinance(
-    symbols=['AAPL', 'MSFT'],
-    start_date='2024-01-01',
-    end_date='2024-12-31',
-    interval='1d'
+# 5-minute intraday bars
+intraday = ohlcv_from_yfinance(
+    symbols=['SPY', 'QQQ'],
+    period='5d',
+    interval='5m'
 )
 ```
 
 Returns a MultiIndex DataFrame with `(date, symbol)` levels for easy multi-symbol analysis.
 
-#### Intraday Data
+### Persistent Storage
 
-Fetch high-frequency data for algorithmic trading or analysis:
+#### Time Series Storage (ArcticDB)
 
-```python
-# Get 5-minute bars for today
-intraday = ohlcv_from_yfinance(
-    symbols=['SPY', 'QQQ'],
-    period='1d',
-    interval='5m'
-)
-```
-
-#### Working with Individual Symbols
-
-Get separate DataFrames per symbol for focused analysis:
-
-```python
-# Returns dict: {'AAPL': DataFrame, 'MSFT': DataFrame}
-prices_dict = ohlcv_from_yfinance(
-    symbols=['AAPL', 'MSFT'],
-    period='6mo',
-    output_dict=True
-)
-
-aapl_prices = prices_dict['AAPL']
-```
-
-### Intrinio
-
-Access institutional-quality financial data:
-
-```python
-from chronos_lab.sources import ohlcv_from_intrinio
-
-# Daily data (requires Intrinio API key)
-prices = ohlcv_from_intrinio(
-    symbols=['AAPL', 'MSFT'],
-    start_date='2024-01-01',
-    interval='daily',
-    api_key='your_api_key'  # or set in ~/.chronos_lab/.env
-)
-
-# Intraday bars
-intraday = ohlcv_from_intrinio(
-    symbols=['SPY'],
-    start_date='2024-01-15',
-    end_date='2024-01-16',
-    interval='5m'
-)
-```
-
-### Persistent Storage with ArcticDB
-
-Store and version your time series data efficiently:
+Store OHLCV data in high-performance ArcticDB for later retrieval:
 
 ```python
 from chronos_lab.sources import ohlcv_from_yfinance
 from chronos_lab.storage import ohlcv_to_arcticdb
 
-# Fetch and store in one workflow
-prices = ohlcv_from_yfinance(
-    symbols=['AAPL', 'MSFT', 'GOOGL'],
-    period='1y'
-)
+# Fetch and store
+prices = ohlcv_from_yfinance(symbols=['AAPL', 'MSFT', 'GOOGL'], period='1y')
+ohlcv_to_arcticdb(ohlcv=prices, library_name='yfinance', adb_mode='write')
 
-ohlcv_to_arcticdb(
-    ohlcv=prices,
-    library_name='yfinance',
-    adb_mode='write'
-)
-```
-
-Works with both MultiIndex DataFrames and symbol dictionaries. If library_name is not specified, the default library name is used from the configuration file.
-
-### Reading from ArcticDB
-
-Retrieve stored time series with flexible date filtering and formatting:
-
-```python
+# Read back with date filtering and pivoting
 from chronos_lab.sources import ohlcv_from_arcticdb
 
-# Get last 3 months of data
-prices = ohlcv_from_arcticdb(
-    symbols=['AAPL', 'MSFT', 'GOOGL', 'AMZN'],
+wide_prices = ohlcv_from_arcticdb(
+    symbols=['AAPL', 'MSFT', 'GOOGL'],
     period='3m',
-    library_name='yfinance'
-)
-
-# Or specify exact date range
-prices = ohlcv_from_arcticdb(
-    symbols=['AAPL', 'MSFT'],
-    start_date='2026-01-01',
-    end_date='2026-01-15',
+    columns=['close'],
+    pivot=True,
+    group_by='column',
     library_name='yfinance'
 )
 ```
 
-#### Wide Format for Analysis
+#### Structured Data Storage (Datasets)
 
-Transform to wide format for correlation analysis or charting:
+Store watchlists, portfolio compositions, and security metadata as datasets:
 
 ```python
-# Pivot to wide format: one column per symbol
-wide_prices = ohlcv_from_arcticdb(
-    symbols=['AAPL', 'MSFT', 'GOOGL', 'AMZN'],
-    period='1y',
-    columns=['close'],
-    library_name='yfinance',
-    pivot=True,
-    group_by='column'  # Results in: close_AAPL, close_MSFT, etc.
+from chronos_lab.storage import to_dataset
+from chronos_lab.sources import from_dataset, ohlcv_from_yfinance
+
+# Create and store a watchlist
+watchlist = {
+    'big_tech': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META'],
+    'semiconductors': ['NVDA', 'AMD', 'INTC', 'TSM', 'QCOM']
+}
+to_dataset(dataset_name='my_watchlist', dataset=watchlist)
+
+# Load watchlist and fetch prices
+saved_watchlist = from_dataset(dataset_name='my_watchlist', output_dict=True)
+all_symbols = saved_watchlist['big_tech'] + saved_watchlist['semiconductors']
+
+prices = ohlcv_from_yfinance(
+    symbols=all_symbols,
+    period='5d'
 )
 
-# Calculate returns matrix
-returns = wide_prices.pct_change()
-correlation_matrix = returns.corr()
+print(f"Fetched {len(all_symbols)} symbols: {prices.shape}")
 ```
 
+**Datasets vs ArcticDB**: Use datasets for structured metadata (portfolios, watchlists, security details) and ArcticDB for time series (OHLCV prices). In distributed environments, datasets can be stored in DynamoDB for multi-process workflows.
+
+### Institutional Data (Intrinio)
+
+Access professional financial data with an Intrinio subscription:
+
+```python
+from chronos_lab.sources import ohlcv_from_intrinio
+
+prices = ohlcv_from_intrinio(
+    symbols=['AAPL', 'MSFT'],
+    start_date='2024-01-01',
+    interval='daily'  # or '5m', '1h', etc.
+)
+```
+
+## Documentation
+
+- **[Getting Started Guide](https://vitaliknet.github.io/chronos-lab/getting-started/)** - Installation, first workflows, common patterns
+- **[Configuration](https://vitaliknet.github.io/chronos-lab/configuration/)** - API keys, storage backends, environment setup
+- **[API Reference](https://vitaliknet.github.io/chronos-lab/api/)** - Complete function and class documentation
+
+## Why chronos-lab?
+
+**Modular**: Start with just Yahoo Finance, add ArcticDB when you need persistence, scale to Intrinio for institutional data.
+
+**Fast**: ArcticDB provides columnar storage optimized for time series queries. Datasets offer instant metadata lookups.
+
+**Flexible**: MultiIndex DataFrames for analysis, pivoted wide format for charting, symbol dictionaries for individual processing.
+
+**Production-Ready**: S3 backend for ArcticDB, DynamoDB for datasets, environment-based configuration for dev/staging/prod.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.

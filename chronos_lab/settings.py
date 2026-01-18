@@ -69,6 +69,13 @@ class Settings(BaseSettings):
             Supports tilde expansion (~). Defaults to None. Example: '~/.chronos_lab/arcticdb'
         arcticdb_s3_bucket: S3 bucket name for ArcticDB S3 backend storage. Takes
             precedence over local_path when both are configured. Defaults to None.
+        dataset_local_path: Filesystem path for local dataset JSON file storage.
+            Supports tilde expansion (~). Defaults to None. Example: '~/.chronos_lab/datasets'
+        dataset_ddb_table_name: DynamoDB table name for dataset storage. Required for
+            DynamoDB-backed datasets (names starting with 'ddb_'). Defaults to None.
+        dataset_ddb_map: JSON string mapping dataset names to DynamoDB key structure.
+            Maps dataset names to partition key (pk) and sort key (sk) patterns. Defaults to None.
+            Example: '{"ddb_securities": {"pk": "DATASET#securities", "sk": "ticker"}}'
 
     Configuration:
         - Loads from: ~/.chronos_lab/.env

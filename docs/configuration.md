@@ -16,15 +16,28 @@ On first import, chronos-lab automatically creates `~/.chronos_lab/.env` from th
 
 ```bash
 # Intrinio API Settings
-# INTRINIO_API_KEY=
+#INTRINIO_API_KEY=
+
+# Datatset Settings
+DATASET_LOCAL_PATH=~/.chronos_lab/datasets
+#DATASET_DDB_TABLE_NAME=
+#DATASET_DDB_MAP='{
+#    "ddb_watchlist": {
+#        "pk": "map#ibpm#watchlist",
+#        "sk": "name"
+#    },
+#    "ddb_securities_intrinio": {
+#        "pk": "map#intrinio#securities"
+#    }
+#}'
 
 # ArcticDB Settings
 ARCTICDB_LOCAL_PATH=~/.chronos_lab/arcticdb
 ARCTICDB_DEFAULT_LIBRARY_NAME=uscomp
-# ARCTICDB_S3_BUCKET=
+#ARCTICDB_S3_BUCKET=
 
 # Logging
-# LOG_LEVEL=DEBUG
+#LOG_LEVEL=DEBUG
 ```
 
 ## Configuration Options
@@ -43,6 +56,71 @@ Your Intrinio API key for accessing institutional financial data.
 ```bash
 INTRINIO_API_KEY=your_api_key_here
 ```
+
+### Dataset Storage
+
+Datasets provide structured data storage for portfolio composition, watchlists, security metadata, and other non-time-series data. Datasets can be stored locally as JSON files or in AWS DynamoDB for distributed workflows.
+
+**Important**: Datasets are for structured/metadata storage, NOT time series data. Use ArcticDB for OHLCV price data.
+
+#### DATASET_LOCAL_PATH
+
+Local filesystem path for dataset JSON file storage.
+
+**Default**: `~/.chronos_lab/datasets`
+
+**Supports**: Tilde expansion (`~`)
+
+**Used by**: `to_dataset()` and `from_dataset()` for local storage
+
+**Example**:
+```bash
+DATASET_LOCAL_PATH=~/data/datasets
+```
+
+#### DATASET_DDB_TABLE_NAME
+
+AWS DynamoDB table name for dataset storage. Required for DynamoDB-backed datasets (names starting with `ddb_` prefix).
+
+**Default**: None (DynamoDB disabled)
+
+**Requires**:
+- AWS CLI configuration (see [AWS DynamoDB Setup](#aws-dynamodb-setup) below)
+- DATASET_DDB_MAP configuration
+
+**Used by**: `to_dataset()` and `from_dataset()` for datasets with `ddb_` prefix
+
+**Example**:
+```bash
+DATASET_DDB_TABLE_NAME=my-datasets-table
+```
+
+#### DATASET_DDB_MAP
+
+JSON string mapping dataset names to DynamoDB key structure. Defines partition key (pk) and sort key (sk) patterns for each DynamoDB dataset.
+
+**Default**: None
+
+**Format**: JSON object with dataset names as keys, each containing:
+- `pk`: Partition key pattern (required)
+- `sk`: Sort key field name (optional, defaults to dataset item key)
+
+**Example**:
+```bash
+DATASET_DDB_MAP='{
+    "ddb_watchlist": {
+        "pk": "map#ibpm#watchlist",
+        "sk": "name"
+    },
+    "ddb_securities_intrinio": {
+        "pk": "map#intrinio#securities"
+    }
+}'
+```
+
+**Use Cases**:
+- **Local datasets**: Portfolio composition, custom watchlists, backtesting configurations
+- **DynamoDB datasets**: Distributed workflows where multiple processes share datasets
 
 ### ArcticDB Storage
 
@@ -109,6 +187,7 @@ All settings can be overridden using environment variables. This is useful for:
 **Example**:
 ```bash
 export INTRINIO_API_KEY="my_api_key"
+export DATASET_DDB_TABLE_NAME="prod-datasets"
 export ARCTICDB_DEFAULT_LIBRARY_NAME="production"
 export LOG_LEVEL="WARNING"
 
@@ -176,6 +255,98 @@ ac = ArcDB(library_name='test')
 print("✓ S3 backend configured successfully")
 ```
 
+## AWS DynamoDB Setup
+
+To use datasets with AWS DynamoDB backend for distributed workflows:
+
+### Step 1: Install Dependencies
+
+```bash
+# Install chronos-lab with aws extra
+uv pip install chronos-lab[aws]
+```
+
+### Step 2: Configure AWS CLI
+
+```bash
+# Configure credentials (if not already done)
+aws configure
+```
+
+This creates `~/.aws/credentials` and `~/.aws/config`.
+
+### Step 3: Create DynamoDB Table
+
+Use existing or create a table with partition key (pk) and sort key (sk):
+
+```bash
+aws dynamodb create-table \
+    --table-name my-datasets-table \
+    --attribute-definitions \
+        AttributeName=pk,AttributeType=S \
+        AttributeName=sk,AttributeType=S \
+    --key-schema \
+        AttributeName=pk,KeyType=HASH \
+        AttributeName=sk,KeyType=RANGE \
+    --billing-mode PAY_PER_REQUEST
+```
+
+### Step 4: Configure chronos-lab
+
+Edit `~/.chronos_lab/.env`:
+
+```bash
+DATASET_DDB_TABLE_NAME=my-datasets-table
+DATASET_DDB_MAP='{
+    "ddb_securities": {
+        "pk": "DATASET#securities",
+        "sk": "ticker"
+    },
+    "ddb_portfolio": {
+        "pk": "DATASET#portfolio",
+        "sk": "symbol"
+    }
+}'
+```
+
+### Step 5: Verify
+
+```python
+from chronos_lab.storage import to_dataset
+from chronos_lab.sources import from_dataset
+
+# Write to DynamoDB
+data = {
+    'AAPL': {'name': 'Apple Inc.', 'sector': 'Technology'},
+    'MSFT': {'name': 'Microsoft', 'sector': 'Technology'}
+}
+result = to_dataset(dataset_name='ddb_securities', dataset=data)
+
+# Read from DynamoDB
+securities = from_dataset(dataset_name='ddb_securities')
+print(f"✓ DynamoDB backend configured successfully: {len(securities)} items")
+```
+
+**Distributed Workflow Example**:
+
+One process writes datasets:
+```python
+# Process 1: Update security metadata daily
+from chronos_lab.sources import securities_from_intrinio
+from chronos_lab.storage import to_dataset
+
+securities = securities_from_intrinio()
+to_dataset(dataset_name="ddb_securities", dataset=securities.to_dict(orient='index'))
+```
+
+Other processes read datasets:
+```python
+# Process 2: Research workflow reads latest metadata
+from chronos_lab.sources import from_dataset, ohlcv_from_arcticdb
+
+securities = from_dataset(dataset_name='ddb_securities')
+```
+
 ## Configuration in Code
 
 You can also access and use configuration programmatically:
@@ -186,6 +357,8 @@ from chronos_lab.settings import get_settings
 settings = get_settings()
 
 print(f"Intrinio API Key: {settings.intrinio_api_key}")
+print(f"Dataset Local Path: {settings.dataset_local_path}")
+print(f"Dataset DDB Table: {settings.dataset_ddb_table_name}")
 print(f"ArcticDB Path: {settings.arcticdb_local_path}")
 print(f"Default Library: {settings.arcticdb_default_library_name}")
 print(f"Log Level: {settings.log_level}")
@@ -199,6 +372,7 @@ Use different configuration files for different environments:
 
 **Development** (`~/.chronos_lab/.env`):
 ```bash
+DATASET_LOCAL_PATH=~/dev/datasets
 ARCTICDB_LOCAL_PATH=~/dev/arcticdb
 ARCTICDB_DEFAULT_LIBRARY_NAME=dev
 LOG_LEVEL=DEBUG
@@ -206,6 +380,7 @@ LOG_LEVEL=DEBUG
 
 **Production** (environment variables):
 ```bash
+export DATASET_DDB_TABLE_NAME=prod-datasets-table
 export ARCTICDB_S3_BUCKET=prod-timeseries
 export ARCTICDB_DEFAULT_LIBRARY_NAME=production
 export LOG_LEVEL=WARNING
@@ -223,6 +398,7 @@ docker run -v ~/.chronos_lab:/root/.chronos_lab my-image
 **Option 2: Environment variables**
 ```dockerfile
 ENV INTRINIO_API_KEY=your_key
+ENV DATASET_DDB_TABLE_NAME=my-datasets-table
 ENV ARCTICDB_S3_BUCKET=my-bucket
 ENV LOG_LEVEL=INFO
 ```
