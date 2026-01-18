@@ -354,6 +354,7 @@ arcticdb = [
 ]
 aws = [
     { name = "boto3" },
+    { name = "botocore" },
 ]
 docs = [
     { name = "mkdocs" },
@@ -381,6 +382,7 @@ requires-dist = [
     { name = "arcticdb", marker = "platform_machine == 'aarch64' and sys_platform != 'linux' and extra == 'arcticdb'", index = "https://pypi.org/simple" },
     { name = "arcticdb", marker = "platform_machine != 'aarch64' and extra == 'arcticdb'" },
     { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.42.30" },
+    { name = "botocore", marker = "extra == 'aws'", specifier = ">=1.42.30" },
     { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=2.14.2" },
     { name = "intrinio-sdk", marker = "extra == 'intrinio'", specifier = ">=6.39.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.1" },

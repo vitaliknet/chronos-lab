@@ -19,7 +19,7 @@ Backend Configuration:
 
     AWS S3:
         Prerequisites:
-            1. Install boto3: pip install chronos-lab[arcticdb] boto3
+            1. Install aws extra: pip install chronos-lab[arcticdb,aws]
             2. Configure AWS CLI: aws configure (creates ~/.aws/credentials)
             3. Set AWS_PROFILE environment variable (if using named profiles)
             4. Set ARCTICDB_S3_BUCKET in ~/.chronos_lab/.env
@@ -110,7 +110,7 @@ class ArcDB:
             >>> df = result['payload']
 
         AWS S3 backend:
-            >>> # Requires AWS CLI configuration and boto3
+            >>> # Requires AWS CLI configuration and aws extra: pip install chronos-lab[arcticdb,aws]
             >>> # export AWS_PROFILE=my-profile (if using named profiles)
             >>> ac = ArcDB(
             ...     library_name='my_data',
@@ -149,7 +149,7 @@ class ArcDB:
 
         Note:
             - Backend priority: S3 > Local LMDB > In-memory
-            - S3 backend requires boto3 and AWS CLI configuration
+            - S3 backend requires aws extra and AWS CLI configuration
             - Local path is created automatically if it doesn't exist
             - In-memory backend used if neither S3 nor local path configured
         """
@@ -174,12 +174,7 @@ class ArcDB:
     def _initialize_connection(self):
         try:
             if self._bucket_name:
-                import boto3
-
-                logger.info("Setting up boto3 session.")
-
-                aws_profile = os.getenv('AWS_PROFILE')
-                session = boto3.Session(profile_name=aws_profile)
+                from chronos_lab.aws import session
 
                 uri = f"s3://s3.{session.region_name}.amazonaws.com:{self._bucket_name}?aws_auth=true"
                 logger.info(f"Initializing ArcticDB with S3 backend using bucket: {uri}")

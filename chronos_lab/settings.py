@@ -121,6 +121,10 @@ class Settings(BaseSettings):
     arcticdb_local_path: Optional[str] = None
     arcticdb_s3_bucket: Optional[str] = None
 
+    dataset_local_path: Optional[str] = None
+    dataset_ddb_table_name: Optional[str] = None
+    dataset_ddb_map: Optional[str] = None
+
 
 @lru_cache
 def get_settings() -> Settings:

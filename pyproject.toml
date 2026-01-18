@@ -48,7 +48,8 @@ docs = [
     "mkdocstrings[python]>=1.0.0",
 ]
 aws = [
-    "boto3>=1.42.30"
+    "boto3>=1.42.30",
+    "botocore>=1.42.30"
 ]
 
 [build-system]
@@ -72,4 +73,5 @@ only-include = [
 chronos-mcp = "chronos_lab.mcp.server:main"
 
 [project.urls]
-Homepage = "https://github.com/vitaliknet/chronos-lab"
+Homepage = "https://chronos-lab.vitalik.net/"
+Repository = "https://github.com/vitaliknet/chronos-lab"
