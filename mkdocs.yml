@@ -92,6 +92,8 @@ nav:
     - Low-Level APIs:
       - ArcticDB Wrapper: api/arcdb.md
       - Intrinio Wrapper: api/intrinio.md
+      - AWS Integration: api/aws.md
+      - Dataset Management: api/dataset.md
   - Examples: examples.md
 
 extra:
