@@ -1,22 +1,20 @@
 import pandas as pd
 from typing import List, Dict, Optional
 from hamilton import driver, telemetry
+from hamilton.execution import executors
 from chronos_lab.analysis.dag import standardize, features, anomaly
-from chronos_lab.analysis._utils import process_by_symbol
 
 
 def detect_ohlcv_anomalies(
-    ohlcv: pd.DataFrame | Dict[str, pd.DataFrame],
-    *,
-    ohlcv_features_list: List[str] = None,
-    contamination: float = 0.1,
-    use_adjusted: bool = True,
-    parallel: bool = True,
-    max_workers: Optional[int] = None,
-    driver_config: Optional[Dict] = None,
-    **sklearn_kwargs
+        ohlcv: pd.DataFrame | Dict[str, pd.DataFrame],
+        *,
+        ohlcv_features_list: List[str] = None,
+        contamination: float = 0.1,
+        use_adjusted: bool = True,
+        output_dict: Optional[bool] = False,
+        max_tasks: Optional[int] = 5,
+        **sklearn_kwargs
 ) -> pd.DataFrame | Dict[str, pd.DataFrame]:
-
     if ohlcv_features_list is None:
         ohlcv_features_list = ['returns', 'volume_change', 'high_low_range']
 
@@ -27,24 +25,23 @@ def detect_ohlcv_anomalies(
         'sklearn_kwargs': sklearn_kwargs if sklearn_kwargs else {}
     }
 
-    dr_config = driver_config or {}
     telemetry.disable_telemetry()
-    dr = driver.Driver(config, standardize, features, anomaly, **dr_config)
+    dr = (
+        driver.Builder()
+        .with_config(config)
+        .with_modules(standardize, features, anomaly)
+        .enable_dynamic_execution(allow_experimental_mode=True)
+        .with_local_executor(executors.SynchronousLocalTaskExecutor())
+        .with_remote_executor(executors.MultiProcessingExecutor(max_tasks=max_tasks))
+    ).build()
 
-    def execute_for_symbol(ohlcv: pd.DataFrame) -> pd.DataFrame:
-        result = dr.execute(
-            final_vars=['ohlcv_with_features_anomalies'],
-            inputs={'source_ohlcv': ohlcv}
-        )
-        if isinstance(result, dict):
-            return result['ohlcv_with_features_anomalies']
-        return result
-
-    results = process_by_symbol(
-        ohlcv_input=ohlcv,
-        executor_fn=execute_for_symbol,
-        parallel=parallel,
-        max_workers=max_workers
+    result = dr.execute(
+        final_vars=['ohlcv_with_features_anomalies'],
+        inputs={'source_ohlcv': ohlcv}
     )
 
-    return results
+    if output_dict:
+        result['display_all_functions'] = dr.display_all_functions()
+        return result
+    else:
+        return result['ohlcv_with_features_anomalies']

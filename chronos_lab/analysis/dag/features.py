@@ -4,10 +4,10 @@ from typing import List
 
 
 def ohlcv_features(
-        validate_ohlcv: pd.DataFrame,
+        split_ohlcv_by_symbol: pd.DataFrame,
         ohlcv_features_list: List[str]
 ) -> pd.DataFrame:
-    df = validate_ohlcv.copy()
+    df = split_ohlcv_by_symbol.copy()
     feature_df = pd.DataFrame(index=df.index)
 
     if 'returns' in ohlcv_features_list:

@@ -1,6 +1,8 @@
 import pandas as pd
 from typing import Dict, Any
 
+from hamilton.htypes import Collect
+
 
 def detect_ohlcv_features_anomalies(
         ohlcv_features: pd.DataFrame,
@@ -34,14 +36,19 @@ def detect_ohlcv_features_anomalies(
     return result_df
 
 
-def ohlcv_with_features_anomalies(
-        validate_ohlcv: pd.DataFrame,
+def ohlcv_by_symbol_with_features_anomalies(
+        split_ohlcv_by_symbol: pd.DataFrame,
         detect_ohlcv_features_anomalies: pd.DataFrame
 ) -> pd.DataFrame:
-    result = validate_ohlcv.join(detect_ohlcv_features_anomalies, how='left')
+    result = split_ohlcv_by_symbol.join(detect_ohlcv_features_anomalies, how='left')
 
     result['anomaly_score'] = result['anomaly_score'].fillna(0.0)
     result['is_anomaly'] = result['is_anomaly'].astype('boolean').fillna(False)
     result['anomaly_rank'] = result['anomaly_rank'].fillna(0).astype(int)
 
     return result
+
+
+def ohlcv_with_features_anomalies(
+        ohlcv_by_symbol_with_features_anomalies: Collect[pd.DataFrame]) -> pd.DataFrame:
+    return pd.concat(ohlcv_by_symbol_with_features_anomalies)

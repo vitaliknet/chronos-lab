@@ -1,10 +1,30 @@
 import pandas as pd
+from hamilton.htypes import Parallelizable, Collect
 
 
-def standardize_ohlcv_columns(
+def standardize_ohlcv(
         source_ohlcv: pd.DataFrame,
         use_adjusted: bool = True
 ) -> pd.DataFrame:
+
+    if isinstance(source_ohlcv, pd.DataFrame):
+        if source_ohlcv.index.nlevels != 2:
+            raise ValueError(f"Expected MultiIndex with 2 levels, got {source_ohlcv.index.nlevels}")
+
+        level_0_name = source_ohlcv.index.names[0]
+        level_1_name = source_ohlcv.index.names[1]
+
+        if level_0_name != 'date' or not isinstance(source_ohlcv.index.get_level_values(0), pd.DatetimeIndex):
+            raise ValueError(f"Index level 0 must be 'date' of type DatetimeIndex, got '{level_0_name}'")
+
+        if level_1_name not in ['id', 'symbol']:
+            raise ValueError(f"Index level 1 must be 'id' or 'symbol', got '{level_1_name}'")
+
+        if level_1_name == 'id':
+            source_ohlcv.index = source_ohlcv.index.set_names('symbol', level=1)
+    else:
+        raise ValueError("source_ohlcv must be a pandas DataFrame")
+
     columns = set(source_ohlcv.columns)
 
     has_adj = 'adj_close' in columns
@@ -31,25 +51,31 @@ def standardize_ohlcv_columns(
     return df
 
 
-def validate_ohlcv(standardize_ohlcv_columns: pd.DataFrame) -> pd.DataFrame:
+def validate_ohlcv(standardize_ohlcv: pd.DataFrame) -> pd.DataFrame:
     required_columns = ['open', 'high', 'low', 'close', 'volume']
 
-    missing = set(required_columns) - set(standardize_ohlcv_columns.columns)
+    missing = set(required_columns) - set(standardize_ohlcv.columns)
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    if not isinstance(standardize_ohlcv_columns.index, pd.DatetimeIndex):
-        raise ValueError("DataFrame index must be DatetimeIndex")
-
     critical_columns = ['close', 'volume']
     for col in critical_columns:
-        if standardize_ohlcv_columns[col].isna().any():
+        if standardize_ohlcv[col].isna().any():
             raise ValueError(f"Column '{col}' contains NaN values")
 
-    if (standardize_ohlcv_columns['high'] < standardize_ohlcv_columns['low']).any():
+    if (standardize_ohlcv['high'] < standardize_ohlcv['low']).any():
         raise ValueError("High prices must be >= low prices")
 
-    if (standardize_ohlcv_columns['volume'] < 0).any():
+    if (standardize_ohlcv['volume'] < 0).any():
         raise ValueError("Volume cannot be negative")
 
-    return standardize_ohlcv_columns
+    return standardize_ohlcv
+
+
+def split_ohlcv_by_symbol(validate_ohlcv: pd.DataFrame) -> Parallelizable[pd.DataFrame]:
+    symbols = validate_ohlcv.index.get_level_values(1).unique()
+
+    for symbol in symbols:
+        symbol_df = validate_ohlcv.xs(symbol, level=1, drop_level=False).copy()
+
+        yield symbol_df
