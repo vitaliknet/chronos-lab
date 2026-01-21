@@ -27,7 +27,7 @@ Typical Usage:
 
 from chronos_lab import logger
 from chronos_lab.settings import get_settings
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import pandas as pd
 
 
@@ -221,7 +221,126 @@ def to_dataset(dataset_name: str,
     return ds.save_dataset(dataset_name, dataset)
 
 
+def _to_s3_store(*,
+                 s3_key: str,
+                 s3_body: bytes,
+                 s3_prefix: Optional[str] = None,
+                 s3_metadata: Optional[Dict[str, str]] = None,
+                 **s3_put_object_kwargs
+                 ):
+    from chronos_lab.aws import session, ClientError
+
+    response = {
+        'statusCode': 0
+    }
+
+    s3_client = session.client('s3')
+    settings = get_settings()
+
+    if not settings.store_s3_bucket:
+        logger.error('No S3 bucket configured for storing data. Set STORE_S3_BUCKET setting.')
+        response['statusCode'] = -1
+        return response
+
+    s3_name = f"{s3_prefix}/{s3_key}" if s3_prefix else s3_key
+
+    try:
+        res_put = s3_client.put_object(Body=s3_body,
+                                       Bucket=settings.store_s3_bucket,
+                                       Key=s3_name,
+                                       Metadata=s3_metadata,
+                                       **s3_put_object_kwargs)
+        logger.info('File %s was saved to bucket %s. Details: %s', s3_name, settings.store_s3_bucket,
+                    res_put)
+        response['s3_client_response'] = res_put
+    except ClientError as e:
+        logger.error('Failed to save file %s to bucket %s. Details: %s', s3_name,
+                     settings.store_s3_bucket, e)
+
+    return response
+
+
+def _to_local_store(*,
+                    file_name: str,
+                    content: bytes,
+                    folder: Optional[str] = None,
+                    ):
+    from pathlib import Path
+
+    response = {
+        'statusCode': 0
+    }
+
+    settings = get_settings()
+
+    if not settings.store_local_path:
+        logger.error('No local path configured for storing data. Set STORE_LOCAL_PATH setting.')
+        response['statusCode'] = -1
+        return response
+
+    base_path = Path(settings.store_local_path).expanduser()
+    base_path.mkdir(parents=True, exist_ok=True)
+
+    if folder:
+        target_dir = base_path / folder
+        target_dir.mkdir(parents=True, exist_ok=True)
+        file_path = target_dir / file_name
+    else:
+        file_path = base_path / file_name
+
+    try:
+        file_path.write_bytes(content)
+        logger.info('File %s was saved to %s', file_name, file_path)
+        response['file_path'] = str(file_path)
+    except Exception as e:
+        logger.error('Failed to save file %s to %s. Details: %s', file_name, file_path, e)
+        response['statusCode'] = -1
+
+    return response
+
+
+def to_store(*,
+             file_name: str,
+             content: bytes,
+             folder: Optional[str] = None,
+             stores: Optional[List[str]] = None,
+             s3_metadata: Optional[Dict[str, str]] = None,
+             s3_put_object_kwargs: Optional[Dict[str, Any]] = None):
+    if stores is None:
+        stores = ['local']
+
+    if s3_put_object_kwargs is None:
+        s3_put_object_kwargs = {}
+
+    response = {}
+
+    if 'local' in stores:
+        local_response = _to_local_store(
+            file_name=file_name,
+            content=content,
+            folder=folder
+        )
+        response['local_statusCode'] = local_response['statusCode']
+        if 'file_path' in local_response:
+            response['file_path'] = local_response['file_path']
+
+    if 's3' in stores:
+        s3_response = _to_s3_store(
+            s3_key=file_name,
+            s3_body=content,
+            s3_prefix=folder,
+            s3_metadata=s3_metadata,
+            **s3_put_object_kwargs
+        )
+        response['s3_statusCode'] = s3_response['statusCode']
+        if 's3_client_response' in s3_response:
+            response['s3_client_response'] = s3_response['s3_client_response']
+
+    return response
+
+
 __all__ = [
     'ohlcv_to_arcticdb',
-    'to_dataset'
+    'to_dataset',
+    'to_store',
 ]
