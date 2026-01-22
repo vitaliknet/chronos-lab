@@ -11,6 +11,9 @@ def detect_ohlcv_anomalies(
         ohlcv_features_list: List[str] = None,
         contamination: float = 0.02,
         use_adjusted: bool = True,
+        generate_plots: str = 'enabled',
+        anomaly_period_filter = '6m',
+        return_ohlcv_anomalies_df = False,
         output_dict: Optional[bool] = False,
         max_tasks: Optional[int] = 5,
         **sklearn_kwargs
@@ -24,8 +27,11 @@ def detect_ohlcv_anomalies(
         'contamination': contamination,
         'sklearn_kwargs': sklearn_kwargs if sklearn_kwargs else {
             'n_estimators': 200,
-            'max_samples': 256
-        }
+            'max_samples': 250
+        },
+        'generate_plots': generate_plots,
+        'anomaly_period_filter': anomaly_period_filter,
+        'return_ohlcv_anomalies_df': return_ohlcv_anomalies_df,
     }
 
     telemetry.disable_telemetry()
@@ -39,7 +45,7 @@ def detect_ohlcv_anomalies(
     ).build()
 
     result = dr.execute(
-        final_vars=['anomalies_calculation_complete'],
+        final_vars=['anomalies_complete'],
         inputs={'source_ohlcv': ohlcv}
     )
 
@@ -47,4 +53,4 @@ def detect_ohlcv_anomalies(
         result['display_all_functions'] = dr.display_all_functions()
         return result
     else:
-        return result['anomalies_calculation_complete']
+        return result['anomalies_complete']

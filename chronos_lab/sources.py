@@ -32,6 +32,7 @@ Typical Usage:
 
 from chronos_lab import logger
 from chronos_lab.settings import get_settings
+from chronos_lab._utils import _period
 from typing import List, Optional, Dict, Union, Literal
 from datetime import datetime
 import pandas as pd
@@ -565,7 +566,13 @@ def ohlcv_from_arcticdb(
     result = ac.batch_read(symbol_list=symbols, **read_kwargs)
 
     if result['statusCode'] == 0:
-        result_df = result['payload'].sort_values(['symbol', 'date']).set_index('symbol', append=True)
+        if 'symbol' in result['payload'].columns:
+            result_df = result['payload'].sort_values(['symbol', 'date']).set_index('symbol', append=True)
+        elif 'id' in result['payload'].columns:
+            result_df = result['payload'].sort_values(['id', 'date']).set_index('id', append=True)
+        else:
+            logger.error("No 'symbol' or 'id' column found in batch read result. Check library configuration.")
+            return None
 
         if pivot:
             result_df_output = result_df.unstack('symbol')
@@ -642,39 +649,6 @@ def from_dataset(
             return None
     else:
         return ds.get_datasetDF(dataset_name=dataset_name)
-
-
-def _period(period: str, as_of: Optional[pd.Timestamp] = None) -> tuple[pd.Timestamp, pd.Timestamp]:
-    """Convert period string to date range tuple.
-
-    Args:
-        period: Period string (e.g., '7d', '4w', '3mo', '1y')
-        as_of: Reference timestamp (defaults to current UTC time)
-
-    Returns:
-        Tuple of (start_datetime, end_datetime)
-
-    Raises:
-        ValueError: If period unit is invalid
-    """
-    end_dt = as_of if as_of is not None else pd.Timestamp.now(tz='UTC')
-
-    value = int(period[:-1]) if period[-1].isalpha() else int(period[:-2])
-    unit = period[-1] if period[-1].isalpha() else period[-2:]
-
-    offset_map = {
-        'd': pd.DateOffset(days=value),
-        'w': pd.DateOffset(weeks=value),
-        'mo': pd.DateOffset(months=value),
-        'm': pd.DateOffset(months=value),
-        'y': pd.DateOffset(years=value)
-    }
-
-    if unit not in offset_map:
-        raise ValueError(f"Invalid period unit: {unit}. Use 'd', 'w', 'mo'/'m', or 'y'")
-
-    start_dt = end_dt - offset_map[unit]
-    return (start_dt, end_dt)
 
 
 __all__ = [

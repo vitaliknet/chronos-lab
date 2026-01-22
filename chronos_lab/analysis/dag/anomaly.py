@@ -1,7 +1,9 @@
 import pandas as pd
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from chronos_lab.storage import to_store
+from chronos_lab import logger
 from hamilton.htypes import Collect
+from hamilton.function_modifiers import config
 
 
 def detect_ohlcv_features_anomalies(
@@ -50,8 +52,8 @@ def ohlcv_by_symbol_with_features_anomalies(
 
     return result
 
-
-def anomalies_plot(
+@config.when(generate_plots="enabled")
+def anomalies_plot__enabled(
         ohlcv_by_symbol_with_features_anomalies: pd.DataFrame,
 ) -> Dict[str, Any]:
     import matplotlib.pyplot as plt
@@ -59,6 +61,13 @@ def anomalies_plot(
 
     ohlcv_anomalies_df = ohlcv_by_symbol_with_features_anomalies.copy()
     anomalies = ohlcv_anomalies_df[ohlcv_anomalies_df['is_anomaly']]
+
+    symbol = ohlcv_anomalies_df.index.get_level_values('symbol').unique()[0]
+    start_date = ohlcv_anomalies_df.index.get_level_values('date').min().strftime('%Y%m%d')
+    end_date = ohlcv_anomalies_df.index.get_level_values('date').max().strftime('%Y%m%d')
+    file_name = f"{symbol}_anomaly_{start_date}-{end_date}.png"
+
+    logger.info(f"Generating anomalies plot for {symbol}")
 
     fig, axes = plt.subplots(3, 1, figsize=(14, 10))
 
@@ -92,11 +101,6 @@ def anomalies_plot(
 
     plt.tight_layout()
 
-    symbol = ohlcv_anomalies_df.index.get_level_values('symbol').unique()[0]
-    start_date = ohlcv_anomalies_df.index.get_level_values('date').min().strftime('%Y%m%d')
-    end_date = ohlcv_anomalies_df.index.get_level_values('date').max().strftime('%Y%m%d')
-    file_name = f"{symbol}_anomaly_{start_date}-{end_date}.png"
-
     buf = BytesIO()
     fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
     buf.seek(0)
@@ -104,18 +108,53 @@ def anomalies_plot(
     buf.close()
     plt.close(fig)
 
-    return {
-        'file_name': file_name,
-        'content': content
-    }
+    response = {'plot_to_store': to_store(file_name=file_name,
+                                          content=content),
+                'ohlcv_anomalies_df': ohlcv_by_symbol_with_features_anomalies
+                }
+    return response
 
-def anomalies_plot_to_store(anomalies_plot: Dict[str, Any]) -> Dict[str, Any]:
-    return to_store(file_name=anomalies_plot['file_name'],
-                    content=anomalies_plot['content'])
 
-def anomalies_calculation_complete(
-        anomalies_plot_to_store: Collect[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return anomalies_plot_to_store
+@config.when(generate_plots="disabled")
+def anomalies_plot__disabled(
+        ohlcv_by_symbol_with_features_anomalies: pd.DataFrame,
+) -> Dict[str, Any]:
+    symbol = ohlcv_by_symbol_with_features_anomalies.index.get_level_values('symbol').unique()[0]
+    logger.info(f"Skipping anomalies plot for {symbol}")
+    return {'ohlcv_anomalies_df': ohlcv_by_symbol_with_features_anomalies}
+
+
+def anomaly_events(anomalies_plot: Dict[str, Any],
+                   anomaly_period_filter: Optional[str] = None,
+                   return_ohlcv_anomalies_df: Optional[bool] = False
+                   ) -> dict[str, Any]:
+    ohlcv_anomalies_df = anomalies_plot['ohlcv_anomalies_df'].copy()
+    symbol = ohlcv_anomalies_df.index.get_level_values('symbol').unique()[0]
+
+    if anomaly_period_filter:
+        from chronos_lab._utils import _period
+
+        dates = ohlcv_anomalies_df.index.get_level_values('date')
+        start_date, end_date = _period(anomaly_period_filter,
+                                       as_of=dates.max())
+        anomalies = ohlcv_anomalies_df[ohlcv_anomalies_df['is_anomaly'] & (dates >= start_date) & (dates <= end_date)]
+    else:
+        anomalies = ohlcv_anomalies_df[ohlcv_anomalies_df['is_anomaly']]
+
+    if len(anomalies) > 0:
+        anomalies_plot['anomaly_events'] = anomalies
+
+    if return_ohlcv_anomalies_df:
+        return {symbol: anomalies_plot}
+    else:
+        del anomalies_plot['ohlcv_anomalies_df']
+        return {symbol: anomalies_plot}
+
+def anomalies_complete(
+        anomaly_events: Collect[Dict[str, Any]]) -> pd.DataFrame:
+    return anomaly_events
+
+
 
 #
 #
