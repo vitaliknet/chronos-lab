@@ -55,6 +55,10 @@ analysis = [
     "sf-hamilton[visualization]>=1.50.0",
     "scikit-learn>=1.3.0",
 ]
+visualization = [
+    "matplotlib>=3.10.8",
+    "mplfinance>=0.12.10b0"
+]
 
 [build-system]
 requires = ["hatchling"]
