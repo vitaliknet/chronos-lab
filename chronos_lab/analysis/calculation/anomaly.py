@@ -12,6 +12,7 @@ def detect_ohlcv_anomalies(
         contamination: float = 0.02,
         use_adjusted: bool = True,
         generate_plots: str = 'enabled',
+        plot_to_store_kwargs: Optional[dict] = {},
         anomaly_period_filter='6m',
         return_ohlcv_anomalies_df=False,
         output_dict: Optional[bool] = False,
@@ -30,6 +31,7 @@ def detect_ohlcv_anomalies(
             'max_samples': 250
         },
         'generate_plots': generate_plots,
+        'plot_to_store_kwargs': plot_to_store_kwargs,
         'anomaly_period_filter': anomaly_period_filter,
         'return_ohlcv_anomalies_df': return_ohlcv_anomalies_df,
     }
