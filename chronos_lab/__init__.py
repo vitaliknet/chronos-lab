@@ -44,14 +44,19 @@ Modules:
 """
 
 import logging
+from chronos_lab.settings import get_settings
 from pathlib import Path
 import shutil
 import sys
 
-logging.basicConfig(level=logging.INFO,
+settings = get_settings()
+
+log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+
+logging.basicConfig(level=log_level,
                     format='%(asctime)s | %(name)s | %(funcName)s | %(levelname)s:%(message)s')
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(log_level)
 
 
 def _init_config():

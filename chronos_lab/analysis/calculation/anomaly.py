@@ -12,8 +12,8 @@ def detect_ohlcv_anomalies(
         contamination: float = 0.02,
         use_adjusted: bool = True,
         generate_plots: str = 'enabled',
-        anomaly_period_filter = '6m',
-        return_ohlcv_anomalies_df = False,
+        anomaly_period_filter='6m',
+        return_ohlcv_anomalies_df=False,
         output_dict: Optional[bool] = False,
         max_tasks: Optional[int] = 5,
         **sklearn_kwargs
@@ -41,7 +41,7 @@ def detect_ohlcv_anomalies(
         .with_modules(standardize, features, anomaly)
         .enable_dynamic_execution(allow_experimental_mode=True)
         .with_local_executor(executors.SynchronousLocalTaskExecutor())
-        .with_remote_executor(executors.MultiProcessingExecutor(max_tasks=max_tasks))
+        .with_remote_executor(executors.MultiThreadingExecutor(max_tasks=max_tasks))
     ).build()
 
     result = dr.execute(

@@ -14,13 +14,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 # Copy uv files
-COPY pyproject.toml uv.lock ./
-COPY dist/ ./dist/
+COPY pyproject.toml uv.lock README.md ./
+COPY arcticdb-linux_aarch64/dist/ ./arcticdb-linux_aarch64/dist/
 
 # Install dependencies
-RUN uv sync --frozen --no-dev --no-cache
+RUN uv sync --frozen --no-dev --no-cache --all-extras
 
-# Copy agent module
+# Copy module
 COPY chronos_lab/ ./chronos_lab/
 
 # Expose port
