@@ -59,12 +59,11 @@ def plot_anomalies__enabled(
         plot_to_store_kwargs: Optional[dict] = None
 ) -> Dict[str, Any]:
     from chronos_lab.plot import plot_ohlcv_anomalies
-
-    return {'ohlcv_anomalies_df': ohlcv_by_symbol_with_features_anomalies,
-            'plot_to_store': plot_ohlcv_anomalies(ohlcv_anomalies_df=ohlcv_by_symbol_with_features_anomalies,
-                                                  anomaly_period_filter=anomaly_period_filter,
-                                                  plot_to_store=True,
-                                                  to_store_kwargs=plot_to_store_kwargs)}
+    plot_to_store = plot_ohlcv_anomalies(ohlcv_anomalies_df=ohlcv_by_symbol_with_features_anomalies,
+                                         anomaly_period_filter=anomaly_period_filter,
+                                         plot_to_store=True,
+                                         to_store_kwargs=plot_to_store_kwargs)
+    return {'ohlcv_anomalies_df': ohlcv_by_symbol_with_features_anomalies}
 
 
 @config.when(generate_plots="disabled")
@@ -79,7 +78,6 @@ def filter_anomalies(plot_anomalies: Dict[str, Any],
                      return_ohlcv_df: Optional[bool] = False
                      ) -> Dict[str, Any]:
     ohlcv_anomalies_df = plot_anomalies['ohlcv_anomalies_df'].copy()
-    symbol = ohlcv_anomalies_df.index.get_level_values('symbol').unique()[0]
 
     if anomaly_period_filter:
         from chronos_lab._utils import _period
@@ -101,16 +99,17 @@ def filter_anomalies(plot_anomalies: Dict[str, Any],
         return plot_anomalies
 
 
-def anomalies_complete(
+def anomalies_collect(
         filter_anomalies: Collect[Dict[str, Any]]) -> Dict[str, Any]:
-
     response = {}
 
     anomalies_list = [d['anomalies'] for d in filter_anomalies if d and 'anomalies' in d]
     ohlcv_list = [d['ohlcv_anomalies_df'] for d in filter_anomalies if d and 'ohlcv_anomalies_df' in d]
 
-    _anomalies = pd.concat(anomalies_list, ignore_index=False).sort_index(level=['symbol', 'date']) if anomalies_list else pd.DataFrame()
-    _ohlcv = pd.concat(ohlcv_list, ignore_index=False).sort_index(level=['symbol', 'date']) if ohlcv_list else pd.DataFrame()
+    _anomalies = pd.concat(anomalies_list, ignore_index=False).sort_index(
+        level=['symbol', 'date']) if anomalies_list else pd.DataFrame()
+    _ohlcv = pd.concat(ohlcv_list, ignore_index=False).sort_index(
+        level=['symbol', 'date']) if ohlcv_list else pd.DataFrame()
 
     if len(_anomalies) > 0:
         response['filtered_anomalies_df'] = _anomalies
@@ -119,3 +118,47 @@ def anomalies_complete(
         response['ohlcv_df'] = _ohlcv
 
     return response
+
+
+@config.when(to_dataset="enabled")
+def anomalies_to_dataset__enabled(anomalies_collect: Dict[str, Any],
+                                  dataset_name: str,
+                                  ddb_dataset_ttl: int) -> Dict[str, Any]:
+    from chronos_lab.storage import to_dataset
+
+    anomalies_df = anomalies_collect.get('filtered_anomalies_df').copy()
+
+    if isinstance(anomalies_df, pd.DataFrame):
+        logger.info(f"Saving anomalies to {dataset_name} dataset")
+
+        anomalies_df['id'] = anomalies_df.index.get_level_values('date').strftime(
+            '%Y-%m-%dT%H:%M:%S.000Z') + '#' + anomalies_df.index.get_level_values('symbol')
+
+        if not dataset_name.startswith('ddb_'):
+            anomalies_dict = anomalies_df.reset_index().set_index(['id']).to_dict(orient='index')
+        else:
+            import json
+            from decimal import Decimal
+            from datetime import datetime, timedelta, timezone
+
+            if ddb_dataset_ttl:
+                anomalies_df['ttl'] = int((datetime.now(timezone.utc) + timedelta(days=ddb_dataset_ttl)).timestamp())
+
+            anomalies_dict = json.loads(
+                anomalies_df.reset_index().set_index(['id']).to_json(date_format="iso", orient='index'),
+                parse_float=Decimal)
+
+        anomalies_collect['to_dataset'] = to_dataset(dataset_name=dataset_name, dataset=anomalies_dict)
+    else:
+        logger.warning("No anomalies found to save to dataset.")
+
+    return anomalies_collect
+
+
+@config.when(to_dataset="disabled")
+def anomalies_to_dataset__disabled(anomalies_collect: Dict[str, Any]) -> Dict[str, Any]:
+    return anomalies_collect
+
+
+def anomalies_complete(anomalies_to_dataset: Dict[str, Any]) -> Dict[str, Any]:
+    return anomalies_to_dataset

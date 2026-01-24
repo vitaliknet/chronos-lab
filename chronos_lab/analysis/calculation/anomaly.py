@@ -13,7 +13,10 @@ def detect_ohlcv_anomalies(
         use_adjusted: bool = True,
         generate_plots: str = 'disabled',
         plot_to_store_kwargs=None,
-        anomaly_period_filter='6m',
+        to_dataset: str = 'enabled',
+        dataset_name: str = 'ohlcv_anomalies',
+        ddb_dataset_ttl: int = 7,
+        anomaly_period_filter='1m',
         return_ohlcv_df=False,
         return_dag: Optional[bool] = False,
         max_tasks: Optional[int] = 5,
@@ -36,6 +39,9 @@ def detect_ohlcv_anomalies(
         'plot_to_store_kwargs': plot_to_store_kwargs,
         'anomaly_period_filter': anomaly_period_filter,
         'return_ohlcv_df': return_ohlcv_df,
+        'to_dataset': to_dataset,
+        'dataset_name': dataset_name,
+        'ddb_dataset_ttl': ddb_dataset_ttl
     }
 
     telemetry.disable_telemetry()
