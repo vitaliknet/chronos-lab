@@ -1,6 +1,5 @@
 import pandas as pd
 from typing import Dict, Any, List, Optional
-from chronos_lab.storage import to_store
 from chronos_lab import logger
 from hamilton.htypes import Collect
 from hamilton.function_modifiers import config
@@ -52,157 +51,34 @@ def ohlcv_by_symbol_with_features_anomalies(
 
     return result
 
+
 @config.when(generate_plots="enabled")
-def anomalies_plot__enabled(
+def plot_anomalies__enabled(
         ohlcv_by_symbol_with_features_anomalies: pd.DataFrame,
         anomaly_period_filter: Optional[str] = None,
         plot_to_store_kwargs: Optional[dict] = None
 ) -> Dict[str, Any]:
-    import mplfinance as mpf
-    from io import BytesIO
+    from chronos_lab.plot import plot_ohlcv_anomalies
 
-    ohlcv_anomalies_df = ohlcv_by_symbol_with_features_anomalies.copy().reset_index(level=1)
-    symbol = ohlcv_by_symbol_with_features_anomalies.index.get_level_values('symbol').unique()[0]
-
-    response = {
-        'ohlcv_anomalies_df': ohlcv_by_symbol_with_features_anomalies
-    }
-
-    dates = ohlcv_anomalies_df.index.get_level_values('date')
-
-    if anomaly_period_filter:
-        from chronos_lab._utils import _period
-
-        _start_date, _end_date = _period(
-            anomaly_period_filter,
-            as_of=dates.max()
-        )
-
-        logger.info(f"Filtering anomalies plot to period {_start_date} - {_end_date}")
-
-        anomaly_mask = (
-                ohlcv_anomalies_df['is_anomaly']
-                & (dates >= _start_date)
-                & (dates <= _end_date)
-        )
-    else:
-        anomaly_mask = ohlcv_anomalies_df['is_anomaly']
-
-    if not anomaly_mask.any():
-        logger.info(f"No anomalies found for symbol {symbol}. Skipping plot generation.")
-        return response
-
-    start_date = ohlcv_anomalies_df.index.get_level_values('date').min().strftime('%Y%m%d')
-    end_date = ohlcv_anomalies_df.index.get_level_values('date').max().strftime('%Y%m%d')
-    file_name = f"{symbol}_anomaly_{start_date}-{end_date}.png"
-
-    logger.info(f"Generating anomalies plot for {symbol}")
-
-    bloomberg_style = mpf.make_mpf_style(
-        base_mpf_style='charles',
-        rc={
-            'figure.facecolor': '#000000',
-            'axes.facecolor': '#000000',
-            'axes.edgecolor': '#404040',
-            'axes.labelcolor': '#CCCCCC',
-            'xtick.color': '#CCCCCC',
-            'ytick.color': '#CCCCCC',
-            'grid.color': '#404040',
-            'grid.alpha': 0.3,
-        },
-        marketcolors=mpf.make_marketcolors(
-            up='#00ff00',
-            down='#ff0000',
-            edge='inherit',
-            wick='inherit',
-            volume={'up': '#00ff00', 'down': '#ff0000'},
-            alpha=0.8
-        )
-    )
-
-    apds = [
-        mpf.make_addplot(
-            ohlcv_anomalies_df['close'].where(anomaly_mask),
-            type='scatter',
-            panel=0,
-            marker='o',
-            markersize=30,
-            color='orange'
-        ),
-
-        mpf.make_addplot(
-            ohlcv_anomalies_df['returns'],
-            type='bar',
-            panel=2,
-            color='white',
-            ylim=(ohlcv_anomalies_df['returns'].min(), ohlcv_anomalies_df['returns'].max()),
-            ylabel='Daily return'
-        ),
-
-        mpf.make_addplot(
-            ohlcv_anomalies_df['returns'].where(anomaly_mask),
-            type='bar',
-            panel=2,
-            color='orange',
-            ylim=(ohlcv_anomalies_df['returns'].min(), ohlcv_anomalies_df['returns'].max()),
-        ),
-
-        mpf.make_addplot(
-            ohlcv_anomalies_df['volume'].where(anomaly_mask),
-            type='bar',
-            panel=1,
-            color='orange'
-        ),
-    ]
-
-    fig, axes = mpf.plot(
-        ohlcv_anomalies_df,
-        type='candle',
-        style=bloomberg_style,
-        volume=True,
-        addplot=apds,
-        figsize=(14, 10),
-        panel_ratios=(3, 2, 2),
-        returnfig=True,
-        ylabel='Price (USD)',
-        ylabel_lower='Volume',
-        datetime_format='%Y-%m-%d',
-        xrotation=0
-    )
-
-    for ax in axes:
-        ax.set_facecolor('#000000')
-        ax.yaxis.set_label_position('left')
-        ax.yaxis.tick_left()
-
-    axes[2].axhline(y=0, color='#808080', linestyle='--', linewidth=0.8)
-
-    buf = BytesIO()
-    fig.savefig(buf, format='png', dpi=100, bbox_inches='tight', facecolor='#000000')
-    buf.seek(0)
-    content = buf.read()
-    buf.close()
-
-    response['plot_to_store'] = to_store(file_name=file_name,
-                                         content=content,
-                                         **plot_to_store_kwargs)
-    return response
+    return {'ohlcv_anomalies_df': ohlcv_by_symbol_with_features_anomalies,
+            'plot_to_store': plot_ohlcv_anomalies(ohlcv_anomalies_df=ohlcv_by_symbol_with_features_anomalies,
+                                                  anomaly_period_filter=anomaly_period_filter,
+                                                  plot_to_store=True,
+                                                  to_store_kwargs=plot_to_store_kwargs)}
 
 
 @config.when(generate_plots="disabled")
-def anomalies_plot__disabled(
+def plot_anomalies__disabled(
         ohlcv_by_symbol_with_features_anomalies: pd.DataFrame,
 ) -> Dict[str, Any]:
-    symbol = ohlcv_by_symbol_with_features_anomalies.index.get_level_values('symbol').unique()[0]
-    logger.info(f"Skipping anomalies plot for {symbol}")
     return {'ohlcv_anomalies_df': ohlcv_by_symbol_with_features_anomalies}
 
 
-def anomaly_events(anomalies_plot: Dict[str, Any],
-                   anomaly_period_filter: Optional[str] = None,
-                   return_ohlcv_anomalies_df: Optional[bool] = False
-                   ) -> dict[str, Any]:
-    ohlcv_anomalies_df = anomalies_plot['ohlcv_anomalies_df'].copy()
+def filter_anomalies(plot_anomalies: Dict[str, Any],
+                     anomaly_period_filter: Optional[str] = None,
+                     return_ohlcv_df: Optional[bool] = False
+                     ) -> Dict[str, Any]:
+    ohlcv_anomalies_df = plot_anomalies['ohlcv_anomalies_df'].copy()
     symbol = ohlcv_anomalies_df.index.get_level_values('symbol').unique()[0]
 
     if anomaly_period_filter:
@@ -216,15 +92,30 @@ def anomaly_events(anomalies_plot: Dict[str, Any],
         anomalies = ohlcv_anomalies_df[ohlcv_anomalies_df['is_anomaly']]
 
     if len(anomalies) > 0:
-        anomalies_plot['anomaly_events'] = anomalies
+        plot_anomalies['anomalies'] = anomalies
 
-    if return_ohlcv_anomalies_df:
-        return {symbol: anomalies_plot}
+    if return_ohlcv_df:
+        return plot_anomalies
     else:
-        del anomalies_plot['ohlcv_anomalies_df']
-        return {symbol: anomalies_plot}
+        del plot_anomalies['ohlcv_anomalies_df']
+        return plot_anomalies
+
 
 def anomalies_complete(
-        anomaly_events: Collect[Dict[str, Any]]) -> pd.DataFrame:
-    return anomaly_events
+        filter_anomalies: Collect[Dict[str, Any]]) -> Dict[str, Any]:
 
+    response = {}
+
+    anomalies_list = [d['anomalies'] for d in filter_anomalies if d and 'anomalies' in d]
+    ohlcv_list = [d['ohlcv_anomalies_df'] for d in filter_anomalies if d and 'ohlcv_anomalies_df' in d]
+
+    _anomalies = pd.concat(anomalies_list, ignore_index=False).sort_index(level=['symbol', 'date']) if anomalies_list else pd.DataFrame()
+    _ohlcv = pd.concat(ohlcv_list, ignore_index=False).sort_index(level=['symbol', 'date']) if ohlcv_list else pd.DataFrame()
+
+    if len(_anomalies) > 0:
+        response['filtered_anomalies_df'] = _anomalies
+
+    if len(_ohlcv) > 0:
+        response['ohlcv_df'] = _ohlcv
+
+    return response

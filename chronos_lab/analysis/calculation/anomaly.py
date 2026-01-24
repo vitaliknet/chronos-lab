@@ -11,14 +11,16 @@ def detect_ohlcv_anomalies(
         ohlcv_features_list: List[str] = None,
         contamination: float = 0.02,
         use_adjusted: bool = True,
-        generate_plots: str = 'enabled',
-        plot_to_store_kwargs: Optional[dict] = {},
+        generate_plots: str = 'disabled',
+        plot_to_store_kwargs=None,
         anomaly_period_filter='6m',
-        return_ohlcv_anomalies_df=False,
-        output_dict: Optional[bool] = False,
+        return_ohlcv_df=False,
+        return_dag: Optional[bool] = False,
         max_tasks: Optional[int] = 5,
         **sklearn_kwargs
 ) -> pd.DataFrame | Dict[str, pd.DataFrame]:
+    if plot_to_store_kwargs is None:
+        plot_to_store_kwargs = {}
     if ohlcv_features_list is None:
         ohlcv_features_list = ['returns', 'volume_change', 'high_low_range']
 
@@ -33,7 +35,7 @@ def detect_ohlcv_anomalies(
         'generate_plots': generate_plots,
         'plot_to_store_kwargs': plot_to_store_kwargs,
         'anomaly_period_filter': anomaly_period_filter,
-        'return_ohlcv_anomalies_df': return_ohlcv_anomalies_df,
+        'return_ohlcv_df': return_ohlcv_df,
     }
 
     telemetry.disable_telemetry()
@@ -51,7 +53,7 @@ def detect_ohlcv_anomalies(
         inputs={'source_ohlcv': ohlcv}
     )
 
-    if output_dict:
+    if return_dag:
         result['display_all_functions'] = dr.display_all_functions()
         return result
     else:
