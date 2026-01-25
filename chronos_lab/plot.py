@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional
 from chronos_lab.storage import to_store
 from chronos_lab import logger
 import mplfinance as mpf
+from matplotlib.ticker import PercentFormatter, FuncFormatter
 from io import BytesIO
 
 bloomberg_style = mpf.make_mpf_style(
@@ -28,10 +29,29 @@ bloomberg_style = mpf.make_mpf_style(
 )
 
 
+def human_format(x, pos):
+    """
+    Format numbers as 1K, 1M, 1B, 1T, ...
+    1_000      -> 1.0K
+    2_000_000  -> 2.0M
+    3_000_000_000 -> 3.0B
+    """
+    abs_x = abs(x)
+    if abs_x >= 1_000_000_000_000:
+        return f'{x/1_000_000_000_000:.1f}T'
+    elif abs_x >= 1_000_000_000:
+        return f'{x/1_000_000_000:.1f}B'
+    elif abs_x >= 1_000_000:
+        return f'{x/1_000_000:.1f}M'
+    elif abs_x >= 1_000:
+        return f'{x/1_000:.1f}K'
+    else:
+        return f'{x:.0f}'
+
 def plot_ohlcv_anomalies(
         ohlcv_anomalies_df: pd.DataFrame,
         anomaly_period_filter: Optional[str] = None,
-        plot_to_store: Optional[bool] = True,
+        plot_to_store: Optional[bool] = False,
         to_store_kwargs=None
 ) -> Dict[str, Any]:
     if to_store_kwargs is None:
@@ -71,6 +91,9 @@ def plot_ohlcv_anomalies(
 
     apds = [
         mpf.make_addplot(
+            # (ohlcv_anomalies_df['high'] - ohlcv_anomalies_df['low']).where(anomaly_mask),
+            # bottom=ohlcv_anomalies_df['low'].where(anomaly_mask),
+            # type='bar',
             ohlcv_anomalies_df['close'].where(anomaly_mask),
             type='scatter',
             panel=0,
@@ -81,11 +104,12 @@ def plot_ohlcv_anomalies(
 
         mpf.make_addplot(
             ohlcv_anomalies_df['returns'],
-            type='bar',
+            type='line',
             panel=2,
             color='white',
+            secondary_y=False,
             ylim=(ohlcv_anomalies_df['returns'].min(), ohlcv_anomalies_df['returns'].max()),
-            ylabel='Daily return'
+            ylabel='Return'
         ),
 
         mpf.make_addplot(
@@ -93,6 +117,7 @@ def plot_ohlcv_anomalies(
             type='bar',
             panel=2,
             color='orange',
+            secondary_y=False,
             ylim=(ohlcv_anomalies_df['returns'].min(), ohlcv_anomalies_df['returns'].max()),
         ),
 
@@ -110,21 +135,32 @@ def plot_ohlcv_anomalies(
         style=bloomberg_style,
         volume=True,
         addplot=apds,
-        figsize=(14, 10),
+        figsize=(16, 12),
         panel_ratios=(3, 2, 2),
         returnfig=True,
-        ylabel='Price (USD)',
+        ylabel='Price',
         ylabel_lower='Volume',
         datetime_format='%Y-%m-%d',
         xrotation=0
     )
 
+    fig.suptitle(
+        f"{symbol}",
+        color='white',
+        fontsize=20,
+        y=0.92
+    )
+
+    axes[2].yaxis.set_major_formatter(FuncFormatter(human_format))
+    axes[4].yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
+    axes[4].axhline(y=0, color='#C0C0C0', linestyle='--', linewidth=0.8)
+
     for ax in axes:
         ax.set_facecolor('#000000')
-        ax.yaxis.set_label_position('left')
-        ax.yaxis.tick_left()
+        # ax.yaxis.set_label_position('left')
+        # ax.yaxis.tick_left()
 
-    axes[2].axhline(y=0, color='#808080', linestyle='--', linewidth=0.8)
+        ax.grid(True, which='major', linestyle=':', linewidth=1, color='#C0C0C0')
 
     buf = BytesIO()
     fig.savefig(buf, format='png', dpi=100, bbox_inches='tight', facecolor='#000000')

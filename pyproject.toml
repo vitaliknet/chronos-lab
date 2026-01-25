@@ -17,6 +17,7 @@ authors = [
     { name = "Vitaly Kuznetsov", email = "chronos-lab@vitalik.net" }
 ]
 dependencies = [
+    "ipykernel>=7.1.0",
     "numpy>=2.0.2",
     "pandas>=2.0.2",
     "pydantic-settings>=2.0.2",

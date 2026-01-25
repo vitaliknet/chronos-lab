@@ -126,9 +126,9 @@ def anomalies_to_dataset__enabled(anomalies_collect: Dict[str, Any],
                                   ddb_dataset_ttl: int) -> Dict[str, Any]:
     from chronos_lab.storage import to_dataset
 
-    anomalies_df = anomalies_collect.get('filtered_anomalies_df').copy()
+    if isinstance(anomalies_collect.get('filtered_anomalies_df'), pd.DataFrame):
+        anomalies_df = anomalies_collect.get('filtered_anomalies_df').copy()
 
-    if isinstance(anomalies_df, pd.DataFrame):
         logger.info(f"Saving anomalies to {dataset_name} dataset")
 
         anomalies_df['id'] = anomalies_df.index.get_level_values('date').strftime(
