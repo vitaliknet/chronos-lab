@@ -6,6 +6,7 @@ def standardize_ohlcv(
         source_ohlcv: pd.DataFrame,
         use_adjusted: bool = True
 ) -> pd.DataFrame:
+    """Standardize OHLCV DataFrame to consistent column names and validate MultiIndex structure."""
 
     if isinstance(source_ohlcv, pd.DataFrame):
         if source_ohlcv.index.nlevels != 2:
@@ -52,6 +53,7 @@ def standardize_ohlcv(
 
 
 def validate_ohlcv(standardize_ohlcv: pd.DataFrame) -> pd.DataFrame:
+    """Validate OHLCV data for required columns, missing values, and logical constraints."""
     required_columns = ['open', 'high', 'low', 'close', 'volume']
 
     missing = set(required_columns) - set(standardize_ohlcv.columns)
@@ -73,6 +75,7 @@ def validate_ohlcv(standardize_ohlcv: pd.DataFrame) -> pd.DataFrame:
 
 
 def split_ohlcv_by_symbol(validate_ohlcv: pd.DataFrame) -> Parallelizable[pd.DataFrame]:
+    """Split MultiIndex OHLCV DataFrame into separate DataFrames per symbol for parallel processing."""
     symbols = validate_ohlcv.index.get_level_values(1).unique()
 
     for symbol in symbols:

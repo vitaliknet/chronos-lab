@@ -30,11 +30,14 @@ bloomberg_style = mpf.make_mpf_style(
 
 
 def human_format(x, pos):
-    """
-    Format numbers as 1K, 1M, 1B, 1T, ...
-    1_000      -> 1.0K
-    2_000_000  -> 2.0M
-    3_000_000_000 -> 3.0B
+    """Format large numbers with K, M, B, T suffixes for chart axis labels.
+
+    Args:
+        x: Numeric value to format.
+        pos: Position on the axis (unused, required by matplotlib).
+
+    Returns:
+        Formatted string with appropriate suffix (K, M, B, T) or raw number if less than 1000.
     """
     abs_x = abs(x)
     if abs_x >= 1_000_000_000_000:
@@ -54,6 +57,83 @@ def plot_ohlcv_anomalies(
         plot_to_store: Optional[bool] = False,
         to_store_kwargs=None
 ) -> Dict[str, Any]:
+    """Generate Bloomberg-style candlestick chart with highlighted anomalies.
+
+    Creates a multi-panel visualization showing OHLCV data with anomalies marked as orange
+    markers/bars. The chart includes three panels: price (candlestick), volume, and returns.
+    Uses black background with green/red coloring similar to Bloomberg Terminal.
+
+    Args:
+        ohlcv_anomalies_df: DataFrame with MultiIndex (date, symbol) containing OHLCV data
+            and anomaly detection results. Must include columns: 'open', 'high', 'low',
+            'close', 'volume', 'returns', 'is_anomaly'.
+        anomaly_period_filter: Optional period string to filter which anomalies to highlight
+            on the chart (e.g., '1m', '7d', '2w'). If None, all anomalies in the DataFrame
+            are highlighted. Defaults to None.
+        plot_to_store: Whether to save the plot to storage using the to_store function.
+            If True, saves to S3 or local storage based on configuration. If False, returns
+            raw plot data. Defaults to False.
+        to_store_kwargs: Additional keyword arguments passed to the to_store function when
+            plot_to_store=True. Common options include 'bucket', 'prefix', 'local_path'.
+            Defaults to None.
+
+    Returns:
+        Dictionary with plot metadata. If plot_to_store=False, returns {'file_name': str,
+        'content': bytes, 'mime_type': 'image/png'}. If plot_to_store=True, returns result
+        from to_store function (typically includes 's3_path' or 'local_path'). Returns empty
+        dict if no anomalies found.
+
+    Examples:
+        Generate plot without saving to storage:
+
+        ```python
+        from chronos_lab.sources import ohlcv_from_yfinance
+        from chronos_lab.analysis import detect_ohlcv_anomalies
+        from chronos_lab.plot import plot_ohlcv_anomalies
+
+        # Detect anomalies
+        ohlcv = ohlcv_from_yfinance(symbols=['AAPL'], period='1y')
+        anomalies = detect_ohlcv_anomalies(ohlcv, output_dict=True)
+
+        # Generate plot for Apple, highlighting recent month
+        plot_data = plot_ohlcv_anomalies(
+            anomalies['AAPL'],
+            anomaly_period_filter='1m',
+            plot_to_store=False
+        )
+
+        # Save to file manually
+        with open(plot_data['file_name'], 'wb') as f:
+            f.write(plot_data['content'])
+        ```
+
+        Generate and save plot to S3:
+
+        ```python
+        from chronos_lab.sources import ohlcv_from_arcticdb
+        from chronos_lab.analysis import detect_ohlcv_anomalies
+        from chronos_lab.plot import plot_ohlcv_anomalies
+
+        # Detect anomalies from stored data
+        ohlcv = ohlcv_from_arcticdb(symbols=['TSLA'], period='6m')
+        anomalies = detect_ohlcv_anomalies(
+            ohlcv,
+            generate_plots='disabled',
+            to_dataset='disabled',
+            output_dict=True
+        )
+
+        # Generate plot and save to S3
+        result = plot_ohlcv_anomalies(
+            anomalies['TSLA'],
+            anomaly_period_filter='2w',
+            plot_to_store=True,
+            to_store_kwargs={'bucket': 'my-charts-bucket', 'prefix': 'anomalies/'}
+        )
+
+        print(f"Chart saved to: {result['s3_path']}")
+        ```
+    """
     if to_store_kwargs is None:
         to_store_kwargs = {}
     symbol = ohlcv_anomalies_df.index.get_level_values('symbol').unique()[0]

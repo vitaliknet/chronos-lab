@@ -1,3 +1,9 @@
+"""Internal utility functions for chronos-lab.
+
+This module provides private helper functions used internally across the library.
+These functions are not part of the public API and may change without notice.
+"""
+
 from typing import Optional
 import pandas as pd
 

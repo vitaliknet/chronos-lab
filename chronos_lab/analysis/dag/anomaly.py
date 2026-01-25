@@ -11,6 +11,7 @@ def detect_ohlcv_features_anomalies(
         contamination: float,
         sklearn_kwargs: Dict[str, Any] = None
 ) -> pd.DataFrame:
+    """Run Isolation Forest on computed features to detect anomalies and assign scores and ranks."""
     from sklearn.ensemble import IsolationForest
 
     if sklearn_kwargs is None:
@@ -43,6 +44,7 @@ def ohlcv_by_symbol_with_features_anomalies(
         ohlcv_features: pd.DataFrame,
         detect_ohlcv_features_anomalies: pd.DataFrame
 ) -> pd.DataFrame:
+    """Join anomaly detection results with original OHLCV features DataFrame."""
     result = ohlcv_features.join(detect_ohlcv_features_anomalies, how='left')
 
     result['anomaly_score'] = result['anomaly_score'].fillna(0.0)
@@ -58,6 +60,7 @@ def plot_anomalies__enabled(
         anomaly_period_filter: Optional[str] = None,
         plot_to_store_kwargs: Optional[dict] = None
 ) -> Dict[str, Any]:
+    """Generate and store anomaly visualization plots when plotting is enabled."""
     from chronos_lab.plot import plot_ohlcv_anomalies
     plot_to_store = plot_ohlcv_anomalies(ohlcv_anomalies_df=ohlcv_by_symbol_with_features_anomalies,
                                          anomaly_period_filter=anomaly_period_filter,
@@ -70,6 +73,7 @@ def plot_anomalies__enabled(
 def plot_anomalies__disabled(
         ohlcv_by_symbol_with_features_anomalies: pd.DataFrame,
 ) -> Dict[str, Any]:
+    """Skip plot generation when plotting is disabled and return anomalies data only."""
     return {'ohlcv_anomalies_df': ohlcv_by_symbol_with_features_anomalies}
 
 
@@ -77,6 +81,7 @@ def filter_anomalies(plot_anomalies: Dict[str, Any],
                      anomaly_period_filter: Optional[str] = None,
                      return_ohlcv_df: Optional[bool] = False
                      ) -> Dict[str, Any]:
+    """Filter anomalies by time period and optionally exclude full OHLCV DataFrame from results."""
     ohlcv_anomalies_df = plot_anomalies['ohlcv_anomalies_df'].copy()
 
     if anomaly_period_filter:
@@ -101,6 +106,7 @@ def filter_anomalies(plot_anomalies: Dict[str, Any],
 
 def anomalies_collect(
         filter_anomalies: Collect[Dict[str, Any]]) -> Dict[str, Any]:
+    """Collect and concatenate anomaly results from parallel symbol processing into unified DataFrames."""
     response = {}
 
     anomalies_list = [d['anomalies'] for d in filter_anomalies if d and 'anomalies' in d]
@@ -124,6 +130,7 @@ def anomalies_collect(
 def anomalies_to_dataset__enabled(anomalies_collect: Dict[str, Any],
                                   dataset_name: str,
                                   ddb_dataset_ttl: int) -> Dict[str, Any]:
+    """Save detected anomalies to a dataset with optional DynamoDB TTL when dataset storage is enabled."""
     from chronos_lab.storage import to_dataset
 
     if isinstance(anomalies_collect.get('filtered_anomalies_df'), pd.DataFrame):
@@ -157,8 +164,10 @@ def anomalies_to_dataset__enabled(anomalies_collect: Dict[str, Any],
 
 @config.when(to_dataset="disabled")
 def anomalies_to_dataset__disabled(anomalies_collect: Dict[str, Any]) -> Dict[str, Any]:
+    """Skip dataset storage when disabled and return anomalies data as-is."""
     return anomalies_collect
 
 
 def anomalies_complete(anomalies_to_dataset: Dict[str, Any]) -> Dict[str, Any]:
+    """Final DAG node returning complete anomaly detection results."""
     return anomalies_to_dataset

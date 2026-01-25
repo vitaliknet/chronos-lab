@@ -42,6 +42,11 @@ theme:
 
 plugins:
   - search
+  - mkdocs-jupyter:
+      execute: false
+      include_source: true
+      theme: dark
+      allow_errors: false
   - mkdocstrings:
       handlers:
         python:
@@ -89,12 +94,19 @@ nav:
     - Data Sources: api/sources.md
     - Storage: api/storage.md
     - Settings: api/settings.md
+    - Plotting: api/plot.md
+    - Analysis:
+      - Calculation: api/analysis-calculation.md
+      - DAG Pipelines: api/analysis-dag.md
     - Low-Level APIs:
       - ArcticDB Wrapper: api/arcdb.md
       - Intrinio Wrapper: api/intrinio.md
       - AWS Integration: api/aws.md
       - Dataset Management: api/dataset.md
-  - Examples: examples.md
+  - Tutorials:
+    - Overview: tutorials/index.md
+    - OHLCV Anomaly Detection: tutorials/ohlcv-anomaly-detection.ipynb
+  - Changelog: changelog.md
 
 extra:
   social:

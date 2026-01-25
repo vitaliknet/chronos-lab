@@ -1,6 +1,6 @@
 # Welcome to Chronos Lab
 
-A lightweight Python library for time series financial data analysis with modular architecture.
+chronos-lab integrates proven open-source tools—ArcticDB, scikit-learn, Hamilton DAGs—into a unified workflow for financial time series analysis. Fetch data effortlessly, leverage parallel processing for multi-symbol analysis, and build fully automated pipelines from ingestion to insights. Start prototyping in Jupyter notebooks, then scale the same code to distributed production with DynamoDB and S3. The value isn't in reinventing tools; it's in making them work together seamlessly, so you can focus on research.
 
 ## Quick Links
 
@@ -30,13 +30,13 @@ A lightweight Python library for time series financial data analysis with modula
 
     [:octicons-arrow-right-24: Browse API Docs](api/index.md)
 
--   :material-code-braces:{ .lg .middle } __Examples__
+-   :material-notebook:{ .lg .middle } __Tutorials__
 
     ---
 
-    Real-world patterns and workflows
+    Interactive Jupyter notebooks with visualizations and step-by-step guides
 
-    [:octicons-arrow-right-24: View Examples](examples.md)
+    [:octicons-arrow-right-24: Browse Tutorials](tutorials/index.md)
 
 </div>
 
@@ -50,9 +50,6 @@ A lightweight Python library for time series financial data analysis with modula
 
 **High-Performance Storage**
 : ArcticDB for time series, datasets for structured metadata
-
-**Intraday Support**
-: 1m, 5m, 15m, 1h bars for algorithmic trading and backtesting
 
 **Distributed Workflows**
 : S3 backend for ArcticDB, DynamoDB for multi-process dataset coordination

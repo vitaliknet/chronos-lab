@@ -1,6 +1,6 @@
 [project]
 name = "chronos-lab"
-version = "0.1.4"
+version = "0.1.5"
 description = "Time series research laboratory"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -17,7 +17,6 @@ authors = [
     { name = "Vitaly Kuznetsov", email = "chronos-lab@vitalik.net" }
 ]
 dependencies = [
-    "ipykernel>=7.1.0",
     "numpy>=2.0.2",
     "pandas>=2.0.2",
     "pydantic-settings>=2.0.2",
@@ -47,6 +46,7 @@ docs = [
     "mkdocs>=1.6.1",
     "mkdocs-material>=9.7.1",
     "mkdocstrings[python]>=1.0.0",
+    "mkdocs-jupyter",
 ]
 aws = [
     "boto3>=1.42.30",
@@ -73,9 +73,8 @@ only-include = [
     "chronos_lab/",
     "LICENSE",
     "README.md",
+    "CHANGELOG.md",
     "pyproject.toml",
-    "uv.lock",
-    "Dockerfile.mcp",
 ]
 
 [project.scripts]

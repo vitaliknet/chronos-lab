@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from hamilton import driver, telemetry
 from hamilton.execution import executors
 from chronos_lab.analysis.dag import standardize, features, anomaly
@@ -21,7 +21,41 @@ def detect_ohlcv_anomalies(
         return_dag: Optional[bool] = False,
         max_tasks: Optional[int] = 5,
         **sklearn_kwargs
-) -> pd.DataFrame | Dict[str, pd.DataFrame]:
+) -> Dict[str, Any]:
+    """Detect anomalies in OHLCV time series data using Isolation Forest algorithm.
+
+    Args:
+        ohlcv: OHLCV data as MultiIndex DataFrame (date, symbol) or dict of DataFrames by symbol.
+        ohlcv_features_list: List of features to compute for anomaly detection. Options: 'returns',
+            'volume_change', 'high_low_range', 'volatility'. Defaults to ['returns', 'volume_change',
+            'high_low_range'].
+        contamination: Expected proportion of anomalies in the data. Lower values detect fewer,
+            more extreme anomalies. Defaults to 0.02 (2%).
+        use_adjusted: Whether to use adjusted OHLCV columns (adj_close, etc.) if available.
+            Defaults to True.
+        generate_plots: Whether to generate anomaly plots. Options: 'enabled', 'disabled'.
+            Defaults to 'disabled'.
+        plot_to_store_kwargs: Additional kwargs passed to plot storage function when
+            generate_plots='enabled'. Defaults to None.
+        to_dataset: Whether to save anomalies to a dataset. Options: 'enabled', 'disabled'.
+            Defaults to 'enabled'.
+        dataset_name: Name of the dataset to save anomalies. Use 'ddb_' prefix for DynamoDB
+            datasets. Defaults to 'ohlcv_anomalies'.
+        ddb_dataset_ttl: TTL in days for DynamoDB datasets (ignored for other dataset types).
+            Defaults to 7.
+        anomaly_period_filter: Period string to filter recent anomalies (e.g., '1m', '7d', '2w').
+            None returns all detected anomalies. Defaults to '1m'.
+        return_ohlcv_df: Whether to include full OHLCV DataFrame with features in the result.
+            Defaults to False.
+        return_dag: Whether to return Apache Hamilton Driver along with results. Defaults to False.
+        max_tasks: Maximum number of parallel tasks for remote executor. Defaults to 5.
+        **sklearn_kwargs: Additional kwargs passed to sklearn's IsolationForest. Common options:
+            n_estimators (default 200), max_samples (default 250), bootstrap, max_features.
+
+    Returns:
+        Dictionary containing 'filtered_anomalies_df' and optionally 'ohlcv_df' (if return_ohlcv_df=True)
+        and 'driver' (if return_dag=True).
+    """
     if plot_to_store_kwargs is None:
         plot_to_store_kwargs = {}
     if ohlcv_features_list is None:
@@ -60,7 +94,6 @@ def detect_ohlcv_anomalies(
     )
 
     if return_dag:
-        result['display_all_functions'] = dr.display_all_functions()
-        return result
-    else:
-        return result['anomalies_complete']
+        result['anomalies_complete']['driver'] = dr
+
+    return result['anomalies_complete']

@@ -7,6 +7,7 @@ def ohlcv_features(
         split_ohlcv_by_symbol: pd.DataFrame,
         ohlcv_features_list: List[str]
 ) -> pd.DataFrame:
+    """Compute features from OHLCV data including returns, volume changes, and volatility."""
     df = split_ohlcv_by_symbol.copy()
 
     if 'returns' in ohlcv_features_list:

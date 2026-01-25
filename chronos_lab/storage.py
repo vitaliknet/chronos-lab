@@ -228,6 +228,19 @@ def _to_s3_store(*,
                  s3_metadata: Optional[Dict[str, str]] = None,
                  **s3_put_object_kwargs
                  ):
+    """Store file content to S3 bucket configured in settings.
+
+    Args:
+        s3_key: S3 object key (file name).
+        s3_body: File content as bytes.
+        s3_prefix: Optional S3 prefix to prepend to key (folder path). Defaults to None.
+        s3_metadata: Optional metadata dict to attach to S3 object. Defaults to None.
+        **s3_put_object_kwargs: Additional arguments passed to boto3 put_object call.
+
+    Returns:
+        Dictionary with 'statusCode' (0 on success, -1 on failure) and optionally
+        's3_client_response' containing boto3 response on success.
+    """
     from chronos_lab.aws import session, ClientError
 
     response = {
@@ -265,6 +278,17 @@ def _to_local_store(*,
                     content: bytes,
                     folder: Optional[str] = None,
                     ):
+    """Store file content to local filesystem path configured in settings.
+
+    Args:
+        file_name: Name of file to save.
+        content: File content as bytes.
+        folder: Optional subdirectory within configured store path. Defaults to None.
+
+    Returns:
+        Dictionary with 'statusCode' (0 on success, -1 on failure) and optionally
+        'file_path' containing full path to saved file on success.
+    """
     from pathlib import Path
 
     response = {
@@ -306,6 +330,54 @@ def to_store(*,
              stores: Optional[List[str]] = None,
              s3_metadata: Optional[Dict[str, str]] = None,
              s3_put_object_kwargs: Optional[Dict[str, Any]] = None):
+    """Store file content to local filesystem and/or S3 based on configuration.
+
+    Saves arbitrary file content (images, JSON, binary data) to configured storage
+    backends. Supports local filesystem and S3, or both simultaneously.
+
+    Args:
+        file_name: Name of the file to save.
+        content: File content as bytes.
+        folder: Optional subdirectory/prefix within the configured storage path.
+            For local storage, creates subdirectory under STORE_LOCAL_PATH.
+            For S3, prepends to object key. Defaults to None.
+        stores: List of storage backends to use. Options: ['local'], ['s3'],
+            or ['local', 's3'] for both. Defaults to ['local'].
+        s3_metadata: Optional metadata dict to attach to S3 object (ignored for local).
+            Defaults to None.
+        s3_put_object_kwargs: Additional arguments passed to boto3 put_object
+            (e.g., ContentType, ACL). Defaults to None.
+
+    Returns:
+        Dictionary with status information:
+            - 'local_statusCode': 0 on success, -1 on failure (if 'local' in stores)
+            - 'file_path': Full local path to saved file (if successful)
+            - 's3_statusCode': 0 on success, -1 on failure (if 's3' in stores)
+            - 's3_client_response': boto3 response dict (if S3 successful)
+
+    Example:
+        ```python
+        from chronos_lab.plot import plot_ohlcv_anomalies
+        from chronos_lab.storage import to_store
+
+        # Generate a plot
+        plot_data = plot_ohlcv_anomalies(anomalies_df, plot_to_store=False)
+
+        # Save to both local and S3
+        result = to_store(
+            file_name=plot_data['file_name'],
+            content=plot_data['content'],
+            folder='anomaly_charts',
+            stores=['local', 's3'],
+            s3_metadata={'symbol': 'AAPL', 'analysis_type': 'anomaly'}
+        )
+
+        if result['local_statusCode'] == 0:
+            print(f"Saved locally to: {result['file_path']}")
+        if result['s3_statusCode'] == 0:
+            print("Saved to S3 successfully")
+        ```
+    """
     if stores is None:
         stores = ['local']
 
