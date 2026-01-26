@@ -1,6 +1,12 @@
 # Welcome to Chronos Lab
 
-chronos-lab integrates proven open-source tools—ArcticDB, scikit-learn, Hamilton DAGs—into a unified workflow for financial time series analysis. Fetch data effortlessly, leverage parallel processing for multi-symbol analysis, and build fully automated pipelines from ingestion to insights. Start prototyping in Jupyter notebooks, then scale the same code to distributed production with DynamoDB and S3. The value isn't in reinventing tools; it's in making them work together seamlessly, so you can focus on research.
+chronos-lab is a batteries-included framework for financial time series analysis that turns best-in-class open-source tools into a single, coherent workflow.
+
+It combines ArcticDB for time-series storage, Hamilton DAGs for transparent pipelines, scikit-learn for modeling, and matplotlib for publication-quality visualization—so you can ingest data, analyze thousands of symbols in parallel, and turn results into clear, inspectable insights with minimal glue code.
+
+Prototype interactively in Jupyter notebooks. Scale unchanged pipelines to production with AWS S3 and DynamoDB.
+
+The goal isn’t novelty—it’s leverage. chronos-lab makes the tools you already trust work together, cleanly and predictably.
 
 ## Quick Links
 
@@ -10,7 +16,7 @@ chronos-lab integrates proven open-source tools—ArcticDB, scikit-learn, Hamilt
 
     ---
 
-    Install chronos-lab and build your first data pipeline
+    Install chronos-lab, run a workflow, explore common patterns
 
     [:octicons-arrow-right-24: Installation & Quick Start](getting-started.md)
 
@@ -42,46 +48,24 @@ chronos-lab integrates proven open-source tools—ArcticDB, scikit-learn, Hamilt
 
 ## Key Features
 
-**Modular Design**
-: Install only what you need via optional extras (yfinance, intrinio, arcticdb, aws)
+**Unified Market Data Access** : Pull OHLCV time series from Yahoo Finance, Intrinio, or ArcticDB through a single, consistent interface — analysis-ready, UTC-normalized, and pandas-native from day one.
 
-**Multiple Data Sources**
-: Yahoo Finance for quick analysis, Intrinio for institutional data
+**Research-Grade Time Series Storage** : Store and retrieve large, versioned time series with ArcticDB, optimized for long histories, cross-sectional analysis, and rapid iteration across large universes.
 
-**High-Performance Storage**
-: ArcticDB for time series, datasets for structured metadata
+**Pre-Built, Reusable Analysis DAGs** : Ready-to-use Hamilton DAGs cover common research workflows from ingestion to features, signals, and diagnostics. Use them as-is, adapt them to your research, or treat them as composable building blocks for new ideas.
 
-**Distributed Workflows**
-: S3 backend for ArcticDB, DynamoDB for multi-process dataset coordination
+**Reproducible Research Pipelines** : DAG-based execution makes dependencies explicit and results rerunnable — so experiments are explainable, comparable, and easy to extend over time.
 
-**Type-Safe Configuration**
-: Pydantic-based settings with environment variable overrides
+**Parallel Multi-Symbol Analysis** : Apply the same research logic across thousands of symbols efficiently, without hand-rolled batching or orchestration code.
 
-## Quick Example
+**Structured Datasets & Metadata** : Manage universes, watchlists, security metadata, and intermediate results as explicit datasets (local files or DynamoDB), keeping research inputs auditable and organized.
 
-```python
-from chronos_lab.sources import ohlcv_from_yfinance
-from chronos_lab.storage import ohlcv_to_arcticdb
+**First-Class Visualization** : Integrated matplotlib plotting for transparent, research-grade diagnostics — inspect signals, anomalies, and distributions directly in notebooks.
 
-# Fetch data
-prices = ohlcv_from_yfinance(symbols=['AAPL', 'MSFT'], period='1y')
+**Notebook-to-Workflow Integration** : Run chronos-lab DAGs interactively in Jupyter, or embed them into larger workflows — from scheduled pipelines in Airflow to event-driven architectures on AWS.
 
-# Store for later
-ohlcv_to_arcticdb(ohlcv=prices, library_name='yfinance')
-```
+**Opinionated, Modular Ecosystem** : Install only what you need via optional extras (yfinance, intrinio, arcticdb, aws). No reinvention — just tools designed to work together.
 
-## Installation
-
-```bash
-# Quick start
-uv pip install chronos-lab[yfinance,arcticdb]
-
-# With Intrinio
-uv pip install chronos-lab[yfinance,intrinio,arcticdb]
-
-# With AWS support
-uv pip install chronos-lab[yfinance,arcticdb,aws]
-```
 
 ---
 

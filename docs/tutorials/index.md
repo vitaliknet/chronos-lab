@@ -27,7 +27,7 @@ Learn how to detect anomalies in OHLCV (Open, High, Low, Close, Volume) financia
 Before running these tutorials, install chronos-lab with the required extras:
 
 ```bash
-uv pip install chronos-lab[yfinance,arcticdb]
+uv pip install chronos-lab[yfinance,arcticdb,analysis,visualization]
 ```
 
 ### Running Locally

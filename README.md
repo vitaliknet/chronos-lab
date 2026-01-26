@@ -1,160 +1,59 @@
-# chronos-lab
+# Welcome to Chronos Lab
 
-A lightweight Python library for time series financial data analysis with modular architecture. Install only what you need—from minimal data fetching to full-featured storage capabilities.
+chronos-lab is a batteries-included framework for financial time series analysis that turns best-in-class open-source
+tools into a single, coherent workflow.
 
-## Features
+It combines ArcticDB for time-series storage, Hamilton DAGs for transparent pipelines, scikit-learn for modeling, and
+matplotlib for publication-quality visualization—so you can ingest data, analyze thousands of symbols in parallel, and
+turn results into clear, inspectable insights with minimal glue code.
 
-✨ **Modular Design**: Install only what you need with optional extras
-📊 **Multiple Data Sources**: Yahoo Finance (free) and Intrinio (institutional)
-⚡ **High-Performance Storage**: ArcticDB for time series, datasets for metadata
-🔄 **Flexible Outputs**: MultiIndex DataFrames or symbol dictionaries
-📈 **Intraday Support**: 1m, 5m, 15m, 1h bars for algorithmic trading
-🌐 **Distributed Workflows**: DynamoDB datasets for multi-process coordination
+Prototype interactively in Jupyter notebooks. Scale unchanged pipelines to production with AWS S3 and DynamoDB.
 
-**[📚 Read the full documentation](https://vitaliknet.github.io/chronos-lab/)**
+The goal isn’t novelty—it’s leverage. chronos-lab makes the tools you already trust work together, cleanly and
+predictably.
 
-## Installation
+## Quick Links
 
-Requires Python 3.12+ on macOS or Linux.
+- **[Getting Started Guide](https://vitaliknet.github.io/chronos-lab/getting-started/)** - Installation, running
+  workflows, common patterns
+- **[Configuration](https://vitaliknet.github.io/chronos-lab/configuration/)** - Configure API keys, storage backends,
+  and environment settings
+- **[API Reference](https://vitaliknet.github.io/chronos-lab/api/)** - Complete documentation for all functions and
+  classes
+- **[Tutorials](https://vitaliknet.github.io/chronos-lab/tutorials/)** - Interactive Jupyter notebooks with
+  visualizations and step-by-step guides
+- **[Changelog](https://vitaliknet.github.io/chronos-lab/changelog/)** - User-visible features and breaking changes by release
 
-```bash
-# Quick start: Yahoo Finance only
-uv pip install chronos-lab[yfinance]
 
-# With persistence: Add ArcticDB storage
-uv pip install chronos-lab[yfinance,arcticdb]
+## Key Features
 
-# Professional: Add Intrinio data
-uv pip install chronos-lab[yfinance,intrinio,arcticdb]
+**Unified Market Data Access** : Pull OHLCV time series from Yahoo Finance, Intrinio, or ArcticDB through a single,
+consistent interface — analysis-ready, UTC-normalized, and pandas-native from day one.
 
-# With AWS: Add S3 and DynamoDB support
-uv pip install chronos-lab[yfinance,arcticdb,aws]
-```
+**Research-Grade Time Series Storage** : Store and retrieve large, versioned time series with ArcticDB, optimized for
+long histories, cross-sectional analysis, and rapid iteration across large universes.
 
-Or with pip:
-```bash
-pip install chronos-lab[yfinance,arcticdb]
-```
-## Configuration
+**Pre-Built, Reusable Analysis DAGs** : Ready-to-use Hamilton DAGs cover common research workflows from ingestion to
+features, signals, and diagnostics. Use them as-is, adapt them to your research, or treat them as composable building
+blocks for new ideas.
 
-On first import, chronos-lab creates `~/.chronos_lab/.env` with default settings:
+**Reproducible Research Pipelines** : DAG-based execution makes dependencies explicit and results rerunnable — so
+experiments are explainable, comparable, and easy to extend over time.
 
-```bash
-# Edit configuration
-nano ~/.chronos_lab/.env
-```
+**Parallel Multi-Symbol Analysis** : Apply the same research logic across thousands of symbols efficiently, without
+hand-rolled batching or orchestration code.
 
-Configure API keys (Intrinio), storage paths (ArcticDB, datasets), and logging. All settings support environment variable overrides. See the [Configuration Guide](https://vitaliknet.github.io/chronos-lab/configuration/) for details.
-## Quick Start
+**Structured Datasets & Metadata** : Manage universes, watchlists, security metadata, and intermediate results as
+explicit datasets (local files or DynamoDB), keeping research inputs auditable and organized.
 
-### Fetching Market Data
+**First-Class Visualization** : Integrated matplotlib plotting for transparent, research-grade diagnostics — inspect
+signals, anomalies, and distributions directly in notebooks.
 
-Get daily or intraday price data with one line:
+**Notebook-to-Workflow Integration** : Run chronos-lab DAGs interactively in Jupyter, or embed them into larger
+workflows — from scheduled pipelines in Airflow to event-driven architectures on AWS.
 
-```python
-from chronos_lab.sources import ohlcv_from_yfinance
-
-# Daily data for the last year
-prices = ohlcv_from_yfinance(
-    symbols=['AAPL', 'MSFT', 'GOOGL'],
-    period='1y'
-)
-
-# 5-minute intraday bars
-intraday = ohlcv_from_yfinance(
-    symbols=['SPY', 'QQQ'],
-    period='5d',
-    interval='5m'
-)
-```
-
-Returns a MultiIndex DataFrame with `(date, symbol)` levels for easy multi-symbol analysis.
-
-### Persistent Storage
-
-#### Time Series Storage (ArcticDB)
-
-Store OHLCV data in high-performance ArcticDB for later retrieval:
-
-```python
-from chronos_lab.sources import ohlcv_from_yfinance
-from chronos_lab.storage import ohlcv_to_arcticdb
-
-# Fetch and store
-prices = ohlcv_from_yfinance(symbols=['AAPL', 'MSFT', 'GOOGL'], period='1y')
-ohlcv_to_arcticdb(ohlcv=prices, library_name='yfinance', adb_mode='write')
-
-# Read back with date filtering and pivoting
-from chronos_lab.sources import ohlcv_from_arcticdb
-
-wide_prices = ohlcv_from_arcticdb(
-    symbols=['AAPL', 'MSFT', 'GOOGL'],
-    period='3m',
-    columns=['close'],
-    pivot=True,
-    group_by='column',
-    library_name='yfinance'
-)
-```
-
-#### Structured Data Storage (Datasets)
-
-Store watchlists, portfolio compositions, and security metadata as datasets:
-
-```python
-from chronos_lab.storage import to_dataset
-from chronos_lab.sources import from_dataset, ohlcv_from_yfinance
-
-# Create and store a watchlist
-watchlist = {
-    'big_tech': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META'],
-    'semiconductors': ['NVDA', 'AMD', 'INTC', 'TSM', 'QCOM']
-}
-to_dataset(dataset_name='my_watchlist', dataset=watchlist)
-
-# Load watchlist and fetch prices
-saved_watchlist = from_dataset(dataset_name='my_watchlist', output_dict=True)
-all_symbols = saved_watchlist['big_tech'] + saved_watchlist['semiconductors']
-
-prices = ohlcv_from_yfinance(
-    symbols=all_symbols,
-    period='5d'
-)
-
-print(f"Fetched {len(all_symbols)} symbols: {prices.shape}")
-```
-
-**Datasets vs ArcticDB**: Use datasets for structured metadata (portfolios, watchlists, security details) and ArcticDB for time series (OHLCV prices). In distributed environments, datasets can be stored in DynamoDB for multi-process workflows.
-
-### Institutional Data (Intrinio)
-
-Access professional financial data with an Intrinio subscription:
-
-```python
-from chronos_lab.sources import ohlcv_from_intrinio
-
-prices = ohlcv_from_intrinio(
-    symbols=['AAPL', 'MSFT'],
-    start_date='2024-01-01',
-    interval='daily'  # or '5m', '1h', etc.
-)
-```
-
-## Documentation
-
-- **[Getting Started Guide](https://vitaliknet.github.io/chronos-lab/getting-started/)** - Installation, first workflows, common patterns
-- **[Configuration](https://vitaliknet.github.io/chronos-lab/configuration/)** - API keys, storage backends, environment setup
-- **[API Reference](https://vitaliknet.github.io/chronos-lab/api/)** - Complete function and class documentation
-
-## Why chronos-lab?
-
-**Modular**: Start with just Yahoo Finance, add ArcticDB when you need persistence, scale to Intrinio for institutional data.
-
-**Fast**: ArcticDB provides columnar storage optimized for time series queries. Datasets offer instant metadata lookups.
-
-**Flexible**: MultiIndex DataFrames for analysis, pivoted wide format for charting, symbol dictionaries for individual processing.
-
-**Production-Ready**: S3 backend for ArcticDB, DynamoDB for datasets, environment-based configuration for dev/staging/prod.
+**Opinionated, Modular Ecosystem** : Install only what you need via optional extras (yfinance, intrinio, arcticdb, aws).
+No reinvention — just tools designed to work together.
 
 ## License
 

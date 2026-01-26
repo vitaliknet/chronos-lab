@@ -1,13 +1,12 @@
 # API Reference
 
-Complete API documentation for chronos-lab.
-
 ## High-Level APIs
 
 These are the primary interfaces you'll use for most tasks:
 
-- **[Data Sources](sources.md)** - Fetch data from Yahoo Finance, Intrinio, and ArcticDB
-- **[Storage](storage.md)** - Persist data to ArcticDB
+- **[Sources](sources.md)** - Fetch data from Yahoo Finance, Intrinio, ArcticDB, and Datasets
+- **[Storage](storage.md)** - Persist data to ArcticDB, Datasets, and file Store
+- **[Plotting](plot.md)** - Visualize data with matplotlib/mplfinance 
 - **[Settings](settings.md)** - Configuration management
 
 ## Low-Level APIs
@@ -16,6 +15,8 @@ For advanced use cases requiring fine-grained control:
 
 - **[ArcticDB Wrapper](arcdb.md)** - Direct ArcticDB operations
 - **[Intrinio Wrapper](intrinio.md)** - Direct Intrinio SDK access
+- **[Dataset Management](dataset.md)** - Direct dataset storage and retrieval
+- **[AWS Integration](aws.md)** - AWS utilities for SSM, Secrets Manager, S3, DynamoDB
 
 ## Module Overview
 
@@ -35,8 +36,19 @@ High-level functions for fetching OHLCV time series data:
 High-level functions for persisting data:
 
 - `ohlcv_to_arcticdb()` - Store OHLCV data in ArcticDB
+- `to_dataset()` - Save datasets to local JSON or DynamoDB
+- `to_store()` - Store files to local filesystem and/or S3
 
 [View detailed documentation →](storage.md)
+
+### chronos_lab.plot
+
+High-level functions for visualization:
+
+- `plot_ohlcv_anomalies()` - Create OHLCV charts with anomaly highlighting
+- `human_format()` - Format large numbers for chart labels
+
+[View detailed documentation →](plot.md)
 
 ### chronos_lab.settings
 
@@ -68,19 +80,44 @@ Low-level Intrinio SDK wrapper (advanced use):
 
 [View detailed documentation →](intrinio.md)
 
+### chronos_lab.dataset
+
+Low-level dataset management (advanced use):
+
+- `Dataset` - Class for direct dataset operations
+  - `get_dataset()` - Retrieve dataset as dictionary
+  - `get_datasetDF()` - Retrieve dataset as DataFrame
+  - `save_dataset()` - Save dataset to local or DynamoDB
+  - `delete_dataset_items()` - Remove items from dataset
+
+[View detailed documentation →](dataset.md)
+
+### chronos_lab.aws
+
+Low-level AWS integration utilities (advanced use):
+
+- `aws_get_parameters_by_path()` - Fetch SSM parameters by path
+- `aws_get_parameters()` - Fetch specific SSM parameters
+- `aws_get_secret()` - Retrieve Secrets Manager secret
+- `parse_arn()` - Parse AWS ARN into components
+- `aws_get_resources()` - Query resources by tags
+- `aws_s3_list_objects()` - List S3 bucket objects
+- `DynamoDBDatabase` - Class for DynamoDB operations
+
+[View detailed documentation →](aws.md)
+
 ## Data Format Conventions
 
 All OHLCV data in chronos-lab follows these conventions:
 
 ### Column Names
 - `date`: UTC timezone-aware datetime
+- `symbol`: Ticker symbol
 - `open`: Opening price
 - `high`: High price
 - `low`: Low price
 - `close`: Closing price
 - `volume`: Trading volume
-- `symbol`: Ticker symbol
-- `interval`: Data interval (for intraday data only)
 
 ### Index Structure
 

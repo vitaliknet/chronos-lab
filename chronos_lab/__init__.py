@@ -43,20 +43,9 @@ Modules:
     mcp_server: FastMCP server for Model Context Protocol
 """
 
-import logging
-from chronos_lab.settings import get_settings
 from pathlib import Path
 import shutil
 import sys
-
-settings = get_settings()
-
-log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
-
-logging.basicConfig(level=log_level,
-                    format='%(asctime)s | %(name)s | %(funcName)s | %(levelname)s:%(message)s')
-logger = logging.getLogger()
-logger.setLevel(log_level)
 
 
 def _init_config():
@@ -81,3 +70,15 @@ def _init_config():
 _init_config()
 
 del _init_config
+
+import logging
+from chronos_lab.settings import get_settings
+
+settings = get_settings()
+
+log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+
+logging.basicConfig(level=log_level,
+                    format='%(asctime)s | %(name)s | %(funcName)s | %(levelname)s:%(message)s')
+logger = logging.getLogger()
+logger.setLevel(log_level)

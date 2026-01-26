@@ -91,7 +91,7 @@ nav:
   - Configuration: configuration.md
   - API Reference:
     - Overview: api/index.md
-    - Data Sources: api/sources.md
+    - Sources: api/sources.md
     - Storage: api/storage.md
     - Settings: api/settings.md
     - Plotting: api/plot.md

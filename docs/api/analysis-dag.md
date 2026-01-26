@@ -4,7 +4,7 @@ DAG (Directed Acyclic Graph) pipeline functions for data processing workflows.
 
 ## Overview
 
-The `chronos_lab.analysis.dag` module provides pipeline functions designed for use with workflow orchestration tools like Dagster. These functions are composable and follow DAG patterns for data transformations.
+The `chronos_lab.analysis.dag` module provides pipeline functions used to build Apache Hamilton graphs. These functions are composable and follow DAG patterns for data transformations.
 
 ## Data Standardization
 

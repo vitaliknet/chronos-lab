@@ -1,6 +1,6 @@
 [project]
 name = "chronos-lab"
-version = "0.1.5"
+version = "0.1.6"
 description = "Time series research laboratory"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -83,3 +83,4 @@ chronos-mcp = "chronos_lab.mcp.server:main"
 [project.urls]
 Homepage = "https://chronos-lab.vitalik.net/"
 Repository = "https://github.com/vitaliknet/chronos-lab"
+Changelog = "https://github.com/vitaliknet/chronos-lab/blob/main/CHANGELOG.md"

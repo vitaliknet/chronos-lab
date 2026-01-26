@@ -1,4 +1,4 @@
-# Data Sources API
+# Sources API
 
 High-level functions for fetching OHLCV time series data and structured datasets.
 
