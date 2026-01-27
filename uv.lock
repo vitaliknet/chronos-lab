@@ -374,7 +374,7 @@ wheels = [
 
 [[package]]
 name = "chronos-lab"
-version = "0.1.6"
+version = "0.1.7"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
@@ -425,22 +425,22 @@ requires-dist = [
     { name = "arcticdb", marker = "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'arcticdb'", path = "arcticdb-linux_aarch64/dist/arcticdb-6.7.0-cp313-cp313-linux_aarch64.whl" },
     { name = "arcticdb", marker = "platform_machine == 'aarch64' and sys_platform != 'linux' and extra == 'arcticdb'", index = "https://pypi.org/simple" },
     { name = "arcticdb", marker = "platform_machine != 'aarch64' and extra == 'arcticdb'" },
-    { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.42.30" },
-    { name = "botocore", marker = "extra == 'aws'", specifier = ">=1.42.30" },
-    { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=2.14.2" },
-    { name = "intrinio-sdk", marker = "extra == 'intrinio'", specifier = ">=6.39.0" },
-    { name = "matplotlib", marker = "extra == 'visualization'", specifier = ">=3.10.8" },
+    { name = "boto3", marker = "extra == 'aws'" },
+    { name = "botocore", marker = "extra == 'aws'" },
+    { name = "fastmcp", marker = "extra == 'mcp'" },
+    { name = "intrinio-sdk", marker = "extra == 'intrinio'" },
+    { name = "matplotlib", marker = "extra == 'visualization'" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.1" },
     { name = "mkdocs-jupyter", marker = "extra == 'docs'" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.7.1" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.0" },
-    { name = "mplfinance", marker = "extra == 'visualization'", specifier = ">=0.12.10b0" },
+    { name = "mplfinance", marker = "extra == 'visualization'" },
     { name = "numpy", specifier = ">=2.0.2" },
     { name = "pandas", specifier = ">=2.0.2" },
     { name = "pydantic-settings", specifier = ">=2.0.2" },
-    { name = "scikit-learn", marker = "extra == 'analysis'", specifier = ">=1.3.0" },
-    { name = "sf-hamilton", extras = ["visualization"], marker = "extra == 'analysis'", specifier = ">=1.50.0" },
-    { name = "yfinance", marker = "extra == 'yfinance'", specifier = ">=1.0" },
+    { name = "scikit-learn", marker = "extra == 'analysis'" },
+    { name = "sf-hamilton", extras = ["visualization"], marker = "extra == 'analysis'" },
+    { name = "yfinance", marker = "extra == 'yfinance'" },
 ]
 provides-extras = ["arcticdb", "mcp", "yfinance", "intrinio", "docs", "aws", "analysis", "visualization"]
 

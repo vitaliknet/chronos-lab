@@ -19,6 +19,8 @@ def detect_ohlcv_anomalies(
         anomaly_period_filter='1m',
         return_ohlcv_df=False,
         return_dag: Optional[bool] = False,
+        local_executor_type: Optional[str] = 'synchronous',
+        remote_executor_type: Optional[str] = 'multithreading',
         max_tasks: Optional[int] = 5,
         **sklearn_kwargs
 ) -> Dict[str, Any]:
@@ -48,7 +50,12 @@ def detect_ohlcv_anomalies(
         return_ohlcv_df: Whether to include full OHLCV DataFrame with features in the result.
             Defaults to False.
         return_dag: Whether to return Apache Hamilton Driver along with results. Defaults to False.
-        max_tasks: Maximum number of parallel tasks for remote executor. Defaults to 5.
+        local_executor_type: Hamilton Driver local executor type. Options: 'synchronous'.
+            Defaults to 'synchronous'.
+        remote_executor_type: Hamilton Driver remote executor type. Options: 'multithreading',
+            'multiprocessing'. Defaults to 'multithreading'.
+        max_tasks: Maximum number of parallel tasks for Hamilton Driver remote executor.
+            Defaults to 5.
         **sklearn_kwargs: Additional kwargs passed to sklearn's IsolationForest. Common options:
             n_estimators (default 200), max_samples (default 250), bootstrap, max_features.
 
@@ -79,13 +86,23 @@ def detect_ohlcv_anomalies(
     }
 
     telemetry.disable_telemetry()
+
+    local_executors_map = {
+        'synchronous': executors.SynchronousLocalTaskExecutor(),
+    }
+
+    remote_executors_map = {
+        'multithreading': executors.MultiThreadingExecutor(max_tasks=max_tasks),
+        'multiprocessing': executors.MultiProcessingExecutor(max_tasks=max_tasks),
+    }
+
     dr = (
         driver.Builder()
         .with_config(config)
         .with_modules(standardize, features, anomaly)
         .enable_dynamic_execution(allow_experimental_mode=True)
-        .with_local_executor(executors.SynchronousLocalTaskExecutor())
-        .with_remote_executor(executors.MultiThreadingExecutor(max_tasks=max_tasks))
+        .with_local_executor(local_executors_map[local_executor_type])
+        .with_remote_executor(remote_executors_map[remote_executor_type])
     ).build()
 
     result = dr.execute(

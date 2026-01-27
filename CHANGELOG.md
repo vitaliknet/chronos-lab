@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-01-27
+
+### Added
+- **New Tutorial**: Getting Started with Chronos Lab 
+- Anomaly executor configuration
+
+### Changed
+- Dependency updates
+- Documentation
+
+## [0.1.6] - 2026-01-26
+
+### Changed
+- Documentation cleanup and enhancements
+
 ## [0.1.5] - 2026-01-25
 
 ### Added
@@ -74,7 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP server implementation
 - Docker support and environment configuration
 
-[Unreleased]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.6...v0.1.7
+[0.1.6]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.2...v0.1.3

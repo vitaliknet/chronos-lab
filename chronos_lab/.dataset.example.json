@@ -5,7 +5,7 @@
   "GOOGL": {"weight": 0.02},
   "META": {"weight": 0.02},
   "NVDA": {"weight": 0.02},
-  "BRK.B": {"weight": 0.02},
+  "MCD": {"weight": 0.02},
   "JPM": {"weight": 0.02},
   "JNJ": {"weight": 0.02},
   "V": {"weight": 0.02},

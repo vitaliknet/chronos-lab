@@ -2,6 +2,26 @@
 
 Interactive Jupyter notebook tutorials with complete code examples, visualizations, and detailed explanations.
 
+---
+
+## Getting Started
+
+**Level**: Beginner
+
+**Topics**: Data fetching, ArcticDB storage, datasets, visualization
+
+Learn the fundamentals of chronos-lab through hands-on examples. This tutorial covers:
+
+- Fetching OHLCV data from Yahoo Finance and Intrinio
+- Storing and retrieving data with ArcticDB
+- Working with datasets for securities metadata
+- Creating and storing visualizations
+- Understanding configuration and file storage
+
+[:material-notebook: Open Tutorial](getting-started.ipynb){ .md-button .md-button--primary }
+
+---
+
 ## OHLCV Anomaly Detection
 
 **Level**: Intermediate
