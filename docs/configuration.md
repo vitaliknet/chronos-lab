@@ -37,12 +37,13 @@ STORE_LOCAL_PATH=~/.chronos_lab/store
 #STORE_S3_BUCKET=
 
 # ArcticDB Settings
+ARCTICDB_DEFAULT_BACKEND=lmdb
 ARCTICDB_LOCAL_PATH=~/.chronos_lab/arcticdb
 ARCTICDB_DEFAULT_LIBRARY_NAME=uscomp
 #ARCTICDB_S3_BUCKET=
 
 # Logging
-#LOG_LEVEL=DEBUG
+LOG_LEVEL=WARNING
 ```
 
 ## Configuration Options
@@ -177,6 +178,58 @@ STORE_S3_BUCKET=my-charts-bucket
 
 ### ArcticDB Storage
 
+ArcticDB provides high-performance time series storage with support for three backend types: local LMDB, AWS S3, and in-memory. The backend selection is controlled by `ARCTICDB_DEFAULT_BACKEND` and can be overridden per operation.
+
+#### ARCTICDB_DEFAULT_BACKEND
+
+Default storage backend for ArcticDB operations.
+
+**Valid values**: `lmdb` (local), `s3` (AWS S3), `mem` (in-memory)
+
+**Default**: `lmdb`
+
+**Used by**: `ohlcv_to_arcticdb()`, `ohlcv_from_arcticdb()`, and `ArcDB` class when backend parameter is not specified
+
+**Backend characteristics**:
+- `lmdb`: Local filesystem storage using LMDB. Fast, persistent, suitable for single-machine workflows
+- `s3`: AWS S3 cloud storage. Scalable, distributed, suitable for multi-machine workflows and data sharing
+- `mem`: In-memory storage. Fastest but not persistent. Only recommended for testing
+
+**Example**:
+```bash
+# Use local LMDB backend (default)
+ARCTICDB_DEFAULT_BACKEND=lmdb
+
+# Use S3 backend for distributed workflows
+ARCTICDB_DEFAULT_BACKEND=s3
+
+# Use in-memory backend for testing
+ARCTICDB_DEFAULT_BACKEND=mem
+```
+
+**Override in code**:
+```python
+from chronos_lab.sources import ohlcv_from_arcticdb
+from chronos_lab.storage import ohlcv_to_arcticdb
+
+# Use default backend from configuration
+prices = ohlcv_from_arcticdb(symbols=['AAPL'], period='1y')
+
+# Override to use S3 backend for this operation
+prices = ohlcv_from_arcticdb(
+    symbols=['AAPL'],
+    period='1y',
+    backend='s3'
+)
+
+# Store to LMDB backend explicitly
+ohlcv_to_arcticdb(
+    ohlcv=prices,
+    backend='lmdb',
+    library_name='yfinance'
+)
+```
+
 #### ARCTICDB_LOCAL_PATH
 
 Local filesystem path for ArcticDB LMDB backend storage.
@@ -184,6 +237,8 @@ Local filesystem path for ArcticDB LMDB backend storage.
 **Default**: `~/.chronos_lab/arcticdb`
 
 **Supports**: Tilde expansion (`~`)
+
+**Used when**: `ARCTICDB_DEFAULT_BACKEND=lmdb` or when `backend='lmdb'` is specified in code
 
 **Example**:
 ```bash
@@ -194,24 +249,54 @@ ARCTICDB_LOCAL_PATH=~/data/arctic
 
 AWS S3 bucket name for ArcticDB S3 backend storage.
 
-**Takes precedence over**: `ARCTICDB_LOCAL_PATH`
+**Default**: None (S3 backend disabled)
 
-**Requires**: AWS CLI configuration (see [AWS S3 Setup](#aws-s3-setup) below)
+**Requires**:
+- AWS CLI configuration (see [AWS S3 Setup](#aws-s3-setup) below)
+- `ARCTICDB_DEFAULT_BACKEND=s3` or explicit `backend='s3'` in code
+
+**Used when**: `ARCTICDB_DEFAULT_BACKEND=s3` or when `backend='s3'` is specified in code
 
 **Example**:
 ```bash
+ARCTICDB_DEFAULT_BACKEND=s3
 ARCTICDB_S3_BUCKET=my-timeseries-bucket
 ```
 
 #### ARCTICDB_DEFAULT_LIBRARY_NAME
 
-Default ArcticDB library name used when none is specified.
+Default ArcticDB library name used when none is specified. Libraries provide logical separation of datasets within the same backend (similar to database schemas).
 
 **Default**: `uscomp`
 
+**Used by**: All ArcticDB operations when `library_name` parameter is not specified
+
 **Example**:
 ```bash
+# Use different libraries for different data sources
 ARCTICDB_DEFAULT_LIBRARY_NAME=market_data
+
+# Or organize by environment
+ARCTICDB_DEFAULT_LIBRARY_NAME=production
+```
+
+**Multiple libraries example**:
+```python
+from chronos_lab.storage import ohlcv_to_arcticdb
+from chronos_lab.sources import ohlcv_from_arcticdb
+
+# Store Yahoo Finance data in 'yfinance' library
+ohlcv_to_arcticdb(ohlcv=yf_prices, library_name='yfinance')
+
+# Store Intrinio data in 'intrinio' library
+ohlcv_to_arcticdb(ohlcv=intrinio_prices, library_name='intrinio')
+
+# Retrieve from specific library
+prices = ohlcv_from_arcticdb(
+    symbols=['AAPL'],
+    period='1y',
+    library_name='yfinance'
+)
 ```
 
 ### Logging

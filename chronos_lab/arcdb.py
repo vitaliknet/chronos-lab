@@ -13,23 +13,31 @@ control over ArcticDB operations, custom batch processing, or direct access to u
 ArcticDB APIs.
 
 Backend Configuration:
+    The ArcDB class supports three storage backends: S3, LMDB (local), and MEM (in-memory).
+    Backend selection can be specified via the backend parameter when initializing ArcDB,
+    or automatically determined from environment configuration.
+
     Local (LMDB):
-        Set ARCTICDB_LOCAL_PATH in ~/.chronos_lab/.env
-        Example: ARCTICDB_LOCAL_PATH=~/.chronos_lab/arcticdb
+        Set ARCTICDB_DEFAULT_BACKEND=lmdb and ARCTICDB_LOCAL_PATH in ~/.chronos_lab/.env
+        Example:
+            ARCTICDB_DEFAULT_BACKEND=lmdb
+            ARCTICDB_LOCAL_PATH=~/.chronos_lab/arcticdb
 
     AWS S3:
         Prerequisites:
             1. Install aws extra: pip install chronos-lab[arcticdb,aws]
             2. Configure AWS CLI: aws configure (creates ~/.aws/credentials)
             3. Set AWS_PROFILE environment variable (if using named profiles)
-            4. Set ARCTICDB_S3_BUCKET in ~/.chronos_lab/.env
+            4. Set ARCTICDB_DEFAULT_BACKEND=s3 and ARCTICDB_S3_BUCKET in ~/.chronos_lab/.env
 
         Example:
+            ARCTICDB_DEFAULT_BACKEND=s3
             ARCTICDB_S3_BUCKET=my-timeseries-bucket
             AWS_PROFILE=my-profile  # Optional, exported as environment variable
 
     In-Memory:
-        No configuration needed (not recommended for production)
+        Set ARCTICDB_DEFAULT_BACKEND=mem (not recommended for production)
+        Example: ARCTICDB_DEFAULT_BACKEND=mem
 
 Advanced API Access:
     The ArcDB class exposes underlying ArcticDB objects for advanced operations:
@@ -44,8 +52,11 @@ Typical Usage:
     Basic operations (internal use):
         >>> from chronos_lab.arcdb import ArcDB
         >>>
-        >>> # Initialize connection
+        >>> # Initialize connection with default backend from settings
         >>> ac = ArcDB(library_name='yfinance')
+        >>>
+        >>> # Initialize with explicit backend
+        >>> ac = ArcDB(backend='s3', library_name='yfinance')
         >>>
         >>> # Store multiple symbols
         >>> data_dict = {'AAPL': aapl_df, 'MSFT': msft_df}
@@ -85,6 +96,7 @@ class ArcDB:
     functions in chronos_lab.sources and chronos_lab.storage modules.
 
     Attributes:
+        _backend: Storage backend type ('S3', 'LMDB', or 'MEM')
         _ac: Arctic instance (connection to storage backend). For advanced operations,
             see https://docs.arcticdb.io/dev/api/arctic/
         _lib: Library instance (specific library within Arctic). For advanced operations,
@@ -94,11 +106,11 @@ class ArcDB:
         _library_name: Name of the ArcticDB library
 
     Examples:
-        Basic usage with local storage:
+        Basic usage with default backend from settings:
             >>> from chronos_lab.arcdb import ArcDB
             >>> import pandas as pd
             >>>
-            >>> # Initialize connection
+            >>> # Initialize connection with default backend
             >>> ac = ArcDB(library_name='my_data')
             >>>
             >>> # Store data
@@ -109,12 +121,19 @@ class ArcDB:
             >>> result = ac.batch_read(['AAPL', 'MSFT'])
             >>> df = result['payload']
 
-        AWS S3 backend:
-            >>> # Requires AWS CLI configuration and aws extra: pip install chronos-lab[arcticdb,aws]
-            >>> # export AWS_PROFILE=my-profile (if using named profiles)
+        Explicit backend selection:
+            >>> # Use S3 backend explicitly
             >>> ac = ArcDB(
+            ...     backend='s3',
             ...     library_name='my_data',
             ...     bucket_name='my-timeseries-bucket'
+            ... )
+            >>>
+            >>> # Use local LMDB backend explicitly
+            >>> ac = ArcDB(
+            ...     backend='lmdb',
+            ...     library_name='my_data',
+            ...     local_path='~/.chronos_lab/arcticdb'
             ... )
 
         Advanced API access:
@@ -129,6 +148,7 @@ class ArcDB:
 
     def __init__(self,
                  *,
+                 backend=None,
                  bucket_name=None,
                  local_path=None,
                  library_name):
@@ -138,23 +158,33 @@ class ArcDB:
         or provided parameters. Automatically creates library if it doesn't exist.
 
         Args:
+            backend: Storage backend type ('s3', 'lmdb', or 'mem', case-insensitive).
+                If None, uses ARCTICDB_DEFAULT_BACKEND from configuration. Backend
+                selection determines which connection parameters are used.
             bucket_name: AWS S3 bucket name for S3 backend. If None, uses
-                ARCTICDB_S3_BUCKET from configuration. Takes precedence over local_path.
+                ARCTICDB_S3_BUCKET from configuration. Required when backend='s3'.
             local_path: Local filesystem path for LMDB backend. If None, uses
-                ARCTICDB_LOCAL_PATH from configuration. Ignored if bucket_name is set.
+                ARCTICDB_LOCAL_PATH from configuration. Required when backend='lmdb'.
             library_name: Name of the ArcticDB library to use or create.
 
         Raises:
-            Exception: If connection initialization fails (logged and re-raised).
+            Exception: If connection initialization fails or invalid backend specified
+                (logged and re-raised).
 
         Note:
-            - Backend priority: S3 > Local LMDB > In-memory
+            - Backend must be one of: 's3', 'lmdb', 'mem' (case-insensitive)
             - S3 backend requires aws extra and AWS CLI configuration
-            - Local path is created automatically if it doesn't exist
-            - In-memory backend used if neither S3 nor local path configured
+            - LMDB local path is created automatically if it doesn't exist
+            - MEM backend is in-memory only (not recommended for production)
+            - Backend parameter overrides ARCTICDB_DEFAULT_BACKEND setting
         """
 
         settings = get_settings()
+
+        if not backend:
+            self._backend = settings.arcticdb_default_backend.upper()
+        else:
+            self._backend = backend.upper()
 
         if not bucket_name:
             self._bucket_name = settings.arcticdb_s3_bucket
@@ -173,22 +203,26 @@ class ArcDB:
 
     def _initialize_connection(self):
         try:
-            if self._bucket_name:
+            if self._backend == "S3" and self._bucket_name:
                 from chronos_lab.aws import session
 
                 uri = f"s3://s3.{session.region_name}.amazonaws.com:{self._bucket_name}?aws_auth=true"
                 logger.info(f"Initializing ArcticDB with S3 backend using bucket: {uri}")
                 self._ac = adb.Arctic(uri)
-            elif self._local_path:
+            elif self._backend == "LMDB" and self._local_path:
                 logger.info(f"Initializing ArcticDB with local backend using path: {self._local_path}")
                 if not os.path.exists(self._local_path):
                     os.makedirs(self._local_path)
                 uri = f"lmdb://{self._local_path}"
                 self._ac = adb.Arctic(uri)
-            else:
+            elif self._backend == "MEM":
                 logger.warning(
-                    "No storage backend specified. Using in-memory storage (not recommended for production).")
-                self._ac = adb.Arctic("memory://")
+                    "Using in-memory storage (not recommended for production).")
+                self._ac = adb.Arctic("mem://")
+            else:
+                error_message = f"Invalid backend or missing configuration. Supported backends: S3, LMDB, MEM."
+                logger.error(error_message)
+                raise Exception(error_message)
 
             self._lib = self._ac.get_library(self._library_name, create_if_missing=True)
             logger.info(f"Successfully connected to ArcticDB library: {self._library_name}")

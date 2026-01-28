@@ -431,6 +431,7 @@ def ohlcv_from_arcticdb(
         end_date: Optional[Union[str, pd.Timestamp]] = None,
         period: Optional[str] = None,
         columns: Optional[List[str]] = None,
+        backend: Optional[str] = None,
         library_name: Optional[str] = None,
         pivot: bool = False,
         group_by: Optional[Literal["column", "symbol"]] = "column",
@@ -452,6 +453,9 @@ def ohlcv_from_arcticdb(
         columns: List of specific columns to retrieve (e.g., ['close', 'volume']).
             The 'symbol' column is always included automatically. If None, all columns
             are retrieved.
+        backend: Storage backend type ('s3', 'lmdb', or 'mem', case-insensitive).
+            If None, uses ARCTICDB_DEFAULT_BACKEND from ~/.chronos_lab/.env configuration.
+            Overrides the default backend setting for this operation.
         library_name: ArcticDB library name to query. If None, uses
             ARCTICDB_DEFAULT_LIBRARY_NAME from ~/.chronos_lab/.env configuration.
         pivot: If True, reshape to wide format with symbols as columns.
@@ -474,6 +478,7 @@ def ohlcv_from_arcticdb(
         Basic retrieval with relative period:
             >>> from chronos_lab.sources import ohlcv_from_arcticdb
             >>>
+            >>> # Retrieve from default backend
             >>> prices = ohlcv_from_arcticdb(
             ...     symbols=['AAPL', 'MSFT', 'GOOGL'],
             ...     period='3m',
@@ -487,6 +492,23 @@ def ohlcv_from_arcticdb(
             ...     symbols=['AAPL', 'MSFT'],
             ...     start_date='2024-01-01',
             ...     end_date='2024-12-31',
+            ...     library_name='yfinance'
+            ... )
+
+        Retrieve from specific backend:
+            >>> # Retrieve from S3 backend explicitly
+            >>> prices = ohlcv_from_arcticdb(
+            ...     symbols=['AAPL', 'MSFT'],
+            ...     period='1y',
+            ...     backend='s3',
+            ...     library_name='yfinance'
+            ... )
+            >>>
+            >>> # Retrieve from local LMDB backend explicitly
+            >>> prices = ohlcv_from_arcticdb(
+            ...     symbols=['AAPL', 'MSFT'],
+            ...     period='1y',
+            ...     backend='lmdb',
             ...     library_name='yfinance'
             ... )
 
@@ -525,6 +547,7 @@ def ohlcv_from_arcticdb(
         - Period strings: '7d' (days), '4w' (weeks), '3mo'/'3m' (months), '1y' (years)
         - All timestamps are UTC timezone-aware
         - Data must have been previously stored using ohlcv_to_arcticdb()
+        - Backend parameter allows querying different storage backends (S3, LMDB, MEM)
         - Empty result returns None with warning logged
     """
 
@@ -561,7 +584,7 @@ def ohlcv_from_arcticdb(
     if columns is not None:
         read_kwargs['columns'] = list(set(columns) | {'symbol'})
 
-    ac = ArcDB(library_name=library_name)
+    ac = ArcDB(library_name=library_name, backend=backend)
 
     result = ac.batch_read(symbol_list=symbols, **read_kwargs)
 

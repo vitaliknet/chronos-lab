@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional
 from chronos_lab.storage import to_store
 from chronos_lab import logger
 import mplfinance as mpf
+import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter, FuncFormatter
 from io import BytesIO
 
@@ -249,8 +250,11 @@ def plot_ohlcv_anomalies(
     buf.close()
 
     if plot_to_store:
+        plt.close(fig)
         return to_store(file_name=file_name,
                         content=content,
                         **to_store_kwargs)
     else:
+        plt.show(fig)
+        plt.close(fig)
         return {'file_name': file_name, 'content': content, 'mime_type': 'image/png'}

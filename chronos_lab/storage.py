@@ -34,6 +34,7 @@ import pandas as pd
 def ohlcv_to_arcticdb(
         *,
         ohlcv: pd.DataFrame | Dict[str, pd.DataFrame],
+        backend: Optional[str] = None,
         library_name: Optional[str] = None,
         adb_mode: str = 'write'
 ) -> Dict[str, int]:
@@ -47,6 +48,9 @@ def ohlcv_to_arcticdb(
         ohlcv: OHLCV data in one of two formats:
             - MultiIndex DataFrame with ('date', 'id'/'symbol') levels
             - Dictionary mapping symbols to individual DataFrames
+        backend: Storage backend type ('s3', 'lmdb', or 'mem', case-insensitive).
+            If None, uses ARCTICDB_DEFAULT_BACKEND from ~/.chronos_lab/.env configuration.
+            Overrides the default backend setting for this operation.
         library_name: ArcticDB library name for storage. If None, uses
             ARCTICDB_DEFAULT_LIBRARY_NAME from ~/.chronos_lab/.env configuration.
         adb_mode: Storage mode for ArcticDB operations:
@@ -72,7 +76,7 @@ def ohlcv_to_arcticdb(
             ...     period='1y'
             ... )
             >>>
-            >>> # Store in ArcticDB
+            >>> # Store in ArcticDB with default backend
             >>> result = ohlcv_to_arcticdb(
             ...     ohlcv=prices,
             ...     library_name='yfinance',
@@ -80,6 +84,22 @@ def ohlcv_to_arcticdb(
             ... )
             >>> if result['statusCode'] == 0:
             ...     print("Successfully stored data")
+
+        Store with explicit backend selection:
+            >>> # Store to S3 backend explicitly
+            >>> result = ohlcv_to_arcticdb(
+            ...     ohlcv=prices,
+            ...     backend='s3',
+            ...     library_name='yfinance',
+            ...     adb_mode='write'
+            ... )
+            >>>
+            >>> # Store to local LMDB backend explicitly
+            >>> result = ohlcv_to_arcticdb(
+            ...     ohlcv=prices,
+            ...     backend='lmdb',
+            ...     library_name='yfinance'
+            ... )
 
         Store dictionary of DataFrames from Intrinio:
             >>> from chronos_lab.sources import ohlcv_from_intrinio
@@ -159,7 +179,7 @@ def ohlcv_to_arcticdb(
         ohlcv_dict = ohlcv
 
     try:
-        ac = ArcDB(library_name=library_name)
+        ac = ArcDB(library_name=library_name, backend=backend)
         ac_res = ac.batch_store(data_dict=ohlcv_dict, mode=adb_mode, prune_previous_versions=True)
 
         if ac_res['statusCode'] == 0:
