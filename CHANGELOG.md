@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] – 2026-01-29
+
+### Added
+- **Configurable ArcticDB backends**:  
+  `ohlcv_from_arcticdb()` and `ohlcv_to_arcticdb()` now support explicit selection of the ArcticDB backend (`LMDB`, `S3`, or `MEM`), allowing the same code to run against local, in-memory, or cloud-backed stores.
+- **`AnalysisDriver` API**:  
+  A new interface intended to serve as the foundation for multiple analysis calculations, with caching and Hamilton-based DAG execution.
+- **Updated documentation and examples** covering backend configuration and `AnalysisDriver` API.
+
+### Changed
+- **Anomaly detection interface**:  
+  `detect_ohlcv_anomalies` is deprecated in favor of `AnalysisDriver`-based analysis, aligning anomaly detection with the new unified analysis API.
+- **Plot rendering behavior**:  
+  Plotting logic was refined to ensure figures render correctly in notebooks and scripts without accumulating open figures.
+- **Logging defaults**:  
+  The global log level now defaults to `WARNING` for a quieter out-of-the-box experience.
+
+### Deprecated
+- The `analysis.calculation` module and related anomaly detection helpers. Migration guidance is available in the documentation.
+
 ## [0.1.7] - 2026-01-27
 
 ### Added
@@ -89,7 +109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP server implementation
 - Docker support and environment configuration
 
-[Unreleased]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.4...v0.1.5
