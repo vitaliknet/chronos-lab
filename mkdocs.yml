@@ -96,8 +96,9 @@ nav:
     - Settings: api/settings.md
     - Plotting: api/plot.md
     - Analysis:
+      - Drivers: api/analysis-drivers.md
       - Calculation: api/analysis-calculation.md
-      - DAG Pipelines: api/analysis-dag.md
+      - DAG Modules: api/analysis-dag.md
     - Low-Level APIs:
       - ArcticDB Wrapper: api/arcdb.md
       - Intrinio Wrapper: api/intrinio.md

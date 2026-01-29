@@ -6,7 +6,8 @@ These are the primary interfaces you'll use for most tasks:
 
 - **[Sources](sources.md)** - Fetch data from Yahoo Finance, Intrinio, ArcticDB, and Datasets
 - **[Storage](storage.md)** - Persist data to ArcticDB, Datasets, and file Store
-- **[Plotting](plot.md)** - Visualize data with matplotlib/mplfinance 
+- **[Analysis Drivers](analysis-drivers.md)** - Analysis calculations with Hamilton DAGs
+- **[Plotting](plot.md)** - Visualize data with matplotlib/mplfinance
 - **[Settings](settings.md)** - Configuration management
 
 ## Low-Level APIs
@@ -40,6 +41,15 @@ High-level functions for persisting data:
 - `to_store()` - Store files to local filesystem and/or S3
 
 [View detailed documentation →](storage.md)
+
+### chronos_lab.analysis.driver
+
+High-level driver for composable time series analysis:
+
+- `AnalysisDriver` - Hamilton Driver wrapper for analysis calculations
+  - `detect_anomalies()` - Anomaly detection with Isolation Forest
+
+[View detailed documentation →](analysis-drivers.md)
 
 ### chronos_lab.plot
 

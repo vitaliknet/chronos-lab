@@ -86,6 +86,6 @@ def detect_ohlcv_anomalies(
     )
 
     if return_dag:
-        result['driver'] = driver
+        result['driver'] = driver.drivers['detect_anomalies']
 
     return result

@@ -1,10 +1,10 @@
-# Analysis DAG API
+# Analysis DAG Modules API
 
-DAG (Directed Acyclic Graph) pipeline functions for data processing workflows.
+DAG (Directed Acyclic Graph) modules for data processing workflows.
 
 ## Overview
 
-The `chronos_lab.analysis.dag` module provides pipeline functions used to build Apache Hamilton graphs. These functions are composable and follow DAG patterns for data transformations.
+The `chronos_lab.analysis.dag` modules provide pipeline functions used to build Apache Hamilton graphs. These functions are composable and follow DAG patterns for data transformations.
 
 ## Data Standardization
 

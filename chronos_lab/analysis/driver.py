@@ -55,9 +55,8 @@ class AnalysisDriver:
         Args:
             enable_cache: Enable Hamilton caching for expensive computations.
                 Defaults to True.
-            cache_path: Directory path for cache storage (SQLite + file results).
-                If None, uses HAMILTON_CACHE_PATH from settings, or falls back to
-                '.hamilton_cache'. Supports tilde expansion. Defaults to None.
+            cache_path: Directory path for cache storage. If None, uses HAMILTON_CACHE_PATH from settings.
+                If the setting is not set, raises ValueError.
             local_executor_type: Local executor type.
             remote_executor_type: Remote executor type for parallel processing. Options:
                 'multithreading' or 'multiprocessing'. Defaults to 'multithreading'.
@@ -75,11 +74,11 @@ class AnalysisDriver:
             raise ValueError(
                 "No cache path configured. Set HAMILTON_CACHE_PATH in settings or pass cache_path parameter to AnalysisDriver.")
 
+        self.drivers: Dict[str, driver.Driver] = {}
+
         self._local_executor_type = local_executor_type
         self._remote_executor_type = remote_executor_type
         self._max_parallel_tasks = max_parallel_tasks
-
-        self._drivers: Dict[str, driver.Driver] = {}
 
         if not enable_telemetry:
             telemetry.disable_telemetry()
@@ -176,7 +175,7 @@ class AnalysisDriver:
                 ...     generate_plots='enabled',
                 ...     return_full_data=True
                 ... )
-                >>> full_data = results['ohlcv_df']  # Includes all features
+                >>> full_data = results['ohlcv_df']
         """
         from chronos_lab.analysis.dag import standardize, features, anomaly
 
@@ -201,15 +200,17 @@ class AnalysisDriver:
             'ddb_dataset_ttl': ddb_dataset_ttl
         }
 
-        dr = self._build_default_driver(
-            modules=[standardize, features, anomaly],
-            config=config,
-            local_executor_type=local_executor_type,
-            remote_executor_type=remote_executor_type,
-            max_parallel_tasks=max_parallel_tasks
-        )
+        driver_name = 'detect_anomalies'
+        if driver_name not in self.drivers:
+            self.drivers[driver_name] = self._build_default_driver(
+                modules=[standardize, features, anomaly],
+                config=config,
+                local_executor_type=local_executor_type,
+                remote_executor_type=remote_executor_type,
+                max_parallel_tasks=max_parallel_tasks
+            )
 
-        result = dr.execute(
+        result = self.drivers[driver_name].execute(
             final_vars=['anomalies_complete'],
             inputs={'source_ohlcv': ohlcv}
         )
@@ -222,7 +223,8 @@ class AnalysisDriver:
             config: Dict[str, Any] = None,
             local_executor_type: str = None,
             remote_executor_type: str = None,
-            max_parallel_tasks: int = None
+            max_parallel_tasks: int = None,
+            cache_config: Dict[str, Any] = None,
     ) -> driver.Driver:
         """Build Hamilton Driver with standard configuration.
 
@@ -240,6 +242,8 @@ class AnalysisDriver:
                 Defaults to None.
             max_parallel_tasks: Override the instance's default maximum parallel tasks.
                 If None, uses self._max_parallel_tasks. Defaults to None.
+            cache_config: Configuration dictionary passed to Hamilton's Builder.with_cache().
+                Defaults to None.
 
         Returns:
             Configured Hamilton Driver instance ready for execution.
@@ -283,6 +287,9 @@ class AnalysisDriver:
         )
 
         if self._enable_cache:
-            builder = builder.with_cache(path=self._cache_path)
+            from pathlib import Path
+
+            builder = builder.with_cache(path=Path(self._cache_path).expanduser(),
+                                         **cache_config or {})
 
         return builder.build()

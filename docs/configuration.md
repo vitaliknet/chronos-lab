@@ -44,6 +44,9 @@ ARCTICDB_DEFAULT_LIBRARY_NAME=uscomp
 
 # Logging
 LOG_LEVEL=WARNING
+
+# Hamilton Driver Settings
+HAMILTON_CACHE_PATH=~/.chronos_lab/hamilton_cache
 ```
 
 ## Configuration Options
@@ -307,12 +310,26 @@ Logging level for chronos-lab operations.
 
 **Valid values**: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 
-**Default**: `INFO`
+**Default**: `WARNING`
 
 **Example**:
 ```bash
 LOG_LEVEL=DEBUG
 ```
+
+### Hamilton Driver
+
+Hamilton Driver settings.
+
+#### HAMILTON_CACHE_PATH
+
+Directory path for Hamilton Driver cache storage. Hamilton's caching system stores computation results to disk, enabling significant performance improvements for repeated calculations with the same inputs.
+
+**Default**: `~/.chronos_lab/hamilton_cache`
+
+**Supports**: Tilde expansion (`~`)
+
+**Used by**: `AnalysisDriver` class when `enable_cache=True`
 
 ## Environment Variable Overrides
 
