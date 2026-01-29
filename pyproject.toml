@@ -26,12 +26,6 @@ dependencies = [
 name = "pypi"
 url = "https://pypi.org/simple"
 
-[tool.uv.sources]
-arcticdb = [
-    { path = "arcticdb-linux_aarch64/dist/arcticdb-6.7.0-cp313-cp313-linux_aarch64.whl", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" },
-    { index = "pypi", marker = "sys_platform != 'linux' and platform_machine == 'aarch64'" }
-]
-
 [dependency-groups]
 dev = [
     "pandas-stubs~=2.3.3",

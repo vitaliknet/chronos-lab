@@ -1,8 +1,6 @@
 import pandas as pd
 from typing import List, Dict, Optional, Any
-from hamilton import driver, telemetry
-from hamilton.execution import executors
-from chronos_lab.analysis.dag import standardize, features, anomaly
+from chronos_lab.analysis.driver import AnalysisDriver
 
 
 def detect_ohlcv_anomalies(
@@ -24,7 +22,10 @@ def detect_ohlcv_anomalies(
         max_tasks: Optional[int] = 5,
         **sklearn_kwargs
 ) -> Dict[str, Any]:
-    """Detect anomalies in OHLCV time series data using Isolation Forest algorithm.
+    """ Deprecated. Use `AnalysisDriver.detect_anomalies()` instead.
+    This function is deprecated and will be removed in version 0.2.0
+
+    Detect anomalies in OHLCV time series data using Isolation Forest algorithm.
 
     Args:
         ohlcv: OHLCV data as MultiIndex DataFrame (date, symbol) or dict of DataFrames by symbol.
@@ -63,54 +64,28 @@ def detect_ohlcv_anomalies(
         Dictionary containing 'filtered_anomalies_df' and optionally 'ohlcv_df' (if return_ohlcv_df=True)
         and 'driver' (if return_dag=True).
     """
-    if plot_to_store_kwargs is None:
-        plot_to_store_kwargs = {}
-    if ohlcv_features_list is None:
-        ohlcv_features_list = ['returns', 'volume_change', 'high_low_range']
 
-    config = {
-        'use_adjusted': use_adjusted,
-        'ohlcv_features_list': ohlcv_features_list,
-        'contamination': contamination,
-        'sklearn_kwargs': sklearn_kwargs if sklearn_kwargs else {
-            'n_estimators': 200,
-            'max_samples': 250
-        },
-        'generate_plots': generate_plots,
-        'plot_to_store_kwargs': plot_to_store_kwargs,
-        'anomaly_period_filter': anomaly_period_filter,
-        'return_ohlcv_df': return_ohlcv_df,
-        'to_dataset': to_dataset,
-        'dataset_name': dataset_name,
-        'ddb_dataset_ttl': ddb_dataset_ttl
-    }
+    driver = AnalysisDriver()
 
-    telemetry.disable_telemetry()
-
-    local_executors_map = {
-        'synchronous': executors.SynchronousLocalTaskExecutor(),
-    }
-
-    remote_executors_map = {
-        'multithreading': executors.MultiThreadingExecutor(max_tasks=max_tasks),
-        'multiprocessing': executors.MultiProcessingExecutor(max_tasks=max_tasks),
-    }
-
-    dr = (
-        driver.Builder()
-        .with_config(config)
-        .with_modules(standardize, features, anomaly)
-        .enable_dynamic_execution(allow_experimental_mode=True)
-        .with_local_executor(local_executors_map[local_executor_type])
-        .with_remote_executor(remote_executors_map[remote_executor_type])
-    ).build()
-
-    result = dr.execute(
-        final_vars=['anomalies_complete'],
-        inputs={'source_ohlcv': ohlcv}
+    result = driver.detect_anomalies(
+        ohlcv,
+        ohlcv_features_list=ohlcv_features_list,
+        contamination=contamination,
+        use_adjusted=use_adjusted,
+        generate_plots=generate_plots,
+        plot_to_store_kwargs=plot_to_store_kwargs,
+        to_dataset=to_dataset,
+        dataset_name=dataset_name,
+        ddb_dataset_ttl=ddb_dataset_ttl,
+        anomaly_period_filter=anomaly_period_filter,
+        return_ohlcv_df=return_ohlcv_df,
+        local_executor_type=local_executor_type,
+        remote_executor_type=remote_executor_type,
+        max_parallel_tasks=max_tasks,
+        **sklearn_kwargs
     )
 
     if return_dag:
-        result['anomalies_complete']['driver'] = dr
+        result['driver'] = driver
 
-    return result['anomalies_complete']
+    return result

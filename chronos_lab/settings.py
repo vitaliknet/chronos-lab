@@ -136,6 +136,8 @@ class Settings(BaseSettings):
     store_local_path: Optional[str] = None
     store_s3_bucket: Optional[str] = None
 
+    hamilton_cache_path: Optional[str] = None
+
 
 @lru_cache
 def get_settings() -> Settings:

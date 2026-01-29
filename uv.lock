@@ -42,18 +42,14 @@ wheels = [
 name = "arcticdb"
 version = "6.7.0"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "platform_machine == 'aarch64' and sys_platform != 'linux'",
-    "platform_machine != 'aarch64'",
-]
 dependencies = [
-    { name = "attrs", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
-    { name = "msgpack", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
-    { name = "numpy", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
-    { name = "packaging", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
-    { name = "pandas", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
-    { name = "protobuf", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
-    { name = "pyyaml", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "attrs" },
+    { name = "msgpack" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pandas" },
+    { name = "protobuf" },
+    { name = "pyyaml" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/13/af/cb243572943a2ed81295a26237a9301a6167e789babe7b7e5206f42a36e9/arcticdb-6.7.0-cp312-cp312-macosx_15_0_arm64.whl", hash = "sha256:f69e866e0c2b1750f57de31c57d2f8fc8cd80337d3e2bdcc2ebc47f4958d7751", size = 17493533, upload-time = "2026-01-12T13:07:50.052Z" },
@@ -62,63 +58,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/26/61/132241481127448cb1d8edc9ea681cd70fe9782f2063716f415f7033f390/arcticdb-6.7.0-cp313-cp313-macosx_15_0_arm64.whl", hash = "sha256:229f8a75946f66041239e021998773967177036fbbb0f04c56fb33cb0adcc5f5", size = 17475883, upload-time = "2026-01-12T13:07:56.554Z" },
     { url = "https://files.pythonhosted.org/packages/db/d7/af6d10942450aac2e8e6a071bfa8bebf24bb93674a12595d0326500fe7d5/arcticdb-6.7.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c4be92e5d40db29857b362152e69da249f23e788ba7f5348386e5f9e43a8d0e7", size = 18836932, upload-time = "2026-01-12T13:07:59.069Z" },
 ]
-
-[[package]]
-name = "arcticdb"
-version = "6.7.0"
-source = { path = "arcticdb-linux_aarch64/dist/arcticdb-6.7.0-cp313-cp313-linux_aarch64.whl" }
-resolution-markers = [
-    "platform_machine == 'aarch64' and sys_platform == 'linux'",
-]
-dependencies = [
-    { name = "attrs", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-    { name = "msgpack", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-    { name = "numpy", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-    { name = "packaging", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-    { name = "pandas", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-    { name = "protobuf", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-    { name = "pyyaml", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-]
-wheels = [
-    { filename = "arcticdb-6.7.0-cp313-cp313-linux_aarch64.whl", hash = "sha256:21966e12c51f052a62351dfcace2c0abf5a9b4b39669720f0711bbc78c1156b6" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "asv", marker = "(python_full_version < '3.13' and extra == 'testing') or (sys_platform == 'linux' and extra == 'testing')" },
-    { name = "attrs" },
-    { name = "azure-identity", marker = "extra == 'testing'" },
-    { name = "azure-storage-blob", marker = "extra == 'testing'" },
-    { name = "boto3", marker = "extra == 'testing'" },
-    { name = "coverage", marker = "extra == 'testing'" },
-    { name = "flask", marker = "extra == 'testing'" },
-    { name = "flask-cors", marker = "extra == 'testing'" },
-    { name = "future", marker = "extra == 'testing'" },
-    { name = "hypothesis", marker = "extra == 'testing'", specifier = "<6.73" },
-    { name = "mock", marker = "extra == 'testing'" },
-    { name = "moto", marker = "extra == 'testing'" },
-    { name = "msgpack", specifier = ">=0.5.0" },
-    { name = "numpy" },
-    { name = "packaging" },
-    { name = "packaging", marker = "extra == 'testing'" },
-    { name = "pandas" },
-    { name = "polars", marker = "extra == 'arrow'" },
-    { name = "polars", marker = "extra == 'testing'" },
-    { name = "protobuf", specifier = ">=3.5.0.post1,<7" },
-    { name = "psutil", marker = "extra == 'testing'" },
-    { name = "pyarrow", marker = "extra == 'arrow'" },
-    { name = "pyarrow", marker = "extra == 'testing'" },
-    { name = "pymongo", marker = "extra == 'testing'" },
-    { name = "pytest", marker = "extra == 'testing'" },
-    { name = "pytest-cpp", marker = "extra == 'testing'" },
-    { name = "pytest-timeout", marker = "extra == 'testing'" },
-    { name = "pytest-xdist", marker = "extra == 'testing'" },
-    { name = "pyyaml" },
-    { name = "retrying", marker = "extra == 'testing'" },
-    { name = "trustme", marker = "extra == 'testing'" },
-    { name = "virtualenv", marker = "extra == 'testing'" },
-]
-provides-extras = ["arrow", "testing"]
 
 [[package]]
 name = "asttokens"
@@ -388,8 +327,7 @@ analysis = [
     { name = "sf-hamilton", extra = ["visualization"] },
 ]
 arcticdb = [
-    { name = "arcticdb", version = "6.7.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
-    { name = "arcticdb", version = "6.7.0", source = { path = "arcticdb-linux_aarch64/dist/arcticdb-6.7.0-cp313-cp313-linux_aarch64.whl" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "arcticdb" },
 ]
 aws = [
     { name = "boto3" },
@@ -422,9 +360,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "arcticdb", marker = "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'arcticdb'", path = "arcticdb-linux_aarch64/dist/arcticdb-6.7.0-cp313-cp313-linux_aarch64.whl" },
-    { name = "arcticdb", marker = "platform_machine == 'aarch64' and sys_platform != 'linux' and extra == 'arcticdb'", index = "https://pypi.org/simple" },
-    { name = "arcticdb", marker = "platform_machine != 'aarch64' and extra == 'arcticdb'" },
+    { name = "arcticdb", marker = "extra == 'arcticdb'" },
     { name = "boto3", marker = "extra == 'aws'" },
     { name = "botocore", marker = "extra == 'aws'" },
     { name = "fastmcp", marker = "extra == 'mcp'" },
