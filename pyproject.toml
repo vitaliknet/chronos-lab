@@ -33,7 +33,6 @@ dev = [
 
 [project.optional-dependencies]
 arcticdb = ["arcticdb"]
-mcp = ["fastmcp"]
 yfinance = ["yfinance"]
 intrinio = ["intrinio-sdk"]
 docs = [
@@ -70,9 +69,6 @@ only-include = [
     "CHANGELOG.md",
     "pyproject.toml",
 ]
-
-[project.scripts]
-chronos-mcp = "chronos_lab.mcp.server:main"
 
 [project.urls]
 Homepage = "https://chronos-lab.vitalik.net/"

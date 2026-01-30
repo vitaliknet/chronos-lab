@@ -43,7 +43,7 @@ class AnalysisDriver:
     def __init__(
             self,
             *,
-            enable_cache: bool = True,
+            enable_cache: bool = False,
             cache_path: str = None,
             local_executor_type: Optional[str] = 'synchronous',
             remote_executor_type: str = 'multithreading',
@@ -54,7 +54,7 @@ class AnalysisDriver:
 
         Args:
             enable_cache: Enable Hamilton caching for expensive computations.
-                Defaults to True.
+                Defaults to False.
             cache_path: Directory path for cache storage. If None, uses HAMILTON_CACHE_PATH from settings.
                 If the setting is not set, raises ValueError.
             local_executor_type: Local executor type.
@@ -208,6 +208,74 @@ class AnalysisDriver:
                 local_executor_type=local_executor_type,
                 remote_executor_type=remote_executor_type,
                 max_parallel_tasks=max_parallel_tasks
+            )
+
+        result = self.drivers[driver_name].execute(
+            final_vars=['anomalies_complete'],
+            inputs={'source_ohlcv': ohlcv}
+        )
+
+        return result['anomalies_complete']
+
+    def detect_anomalies2(
+            self,
+            ohlcv: pd.DataFrame | Dict[str, pd.DataFrame],
+            *,
+            ohlcv_features_list: List[str] = None,
+            use_adjusted: bool = True,
+            isolation_forest_config: Dict[str, Any] = None,
+            to_dataset: str = 'enabled',
+            to_dataset_config: Dict[str, Any] = None,
+            to_arcticdb: str = 'enabled',
+            to_arcticdb_config: Dict[str, Any] = None,
+            driver_config: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
+        from chronos_lab.analysis.dag import standardize, features, anomaly2
+
+        if ohlcv_features_list is None:
+            ohlcv_features_list = ['returns', 'volume_change', 'high_low_range']
+
+        if to_dataset_config is None:
+            to_dataset_config = {
+                'dataset_name': 'ohlcv_anomalies',
+                'ddb_dataset_ttl': 7,
+            }
+
+        if to_arcticdb_config is None:
+            to_arcticdb_config = {
+                'backend': 'LMDB',
+                'library_name': 'analysis',
+                'symbol_suffix': 'anomaly',
+            }
+
+        if driver_config is None:
+            driver_config = {
+            }
+
+        if isolation_forest_config is None:
+            isolation_forest_config = {
+                'contamination': 0.02,
+                'random_state': 42,
+                'n_estimators': 200,
+                'max_samples': 250
+            }
+
+        config = {
+            'use_adjusted': use_adjusted,
+            'ohlcv_features_list': ohlcv_features_list,
+            'to_dataset': to_dataset,
+            'to_dataset_config': to_dataset_config,
+            'to_arcticdb': to_arcticdb,
+            'to_arcticdb_config': to_arcticdb_config,
+            'isolation_forest_config': isolation_forest_config,
+        }
+
+        driver_name = 'detect_anomalies'
+        if driver_name not in self.drivers:
+            self.drivers[driver_name] = self._build_default_driver(
+                modules=[standardize, features, anomaly2],
+                config=config,
+                **driver_config
             )
 
         result = self.drivers[driver_name].execute(

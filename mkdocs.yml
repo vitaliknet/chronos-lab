@@ -106,6 +106,7 @@ nav:
       - Dataset Management: api/dataset.md
   - Tutorials:
     - Overview: tutorials/index.md
+    - Getting Started: tutorials/getting-started.ipynb
     - OHLCV Anomaly Detection: tutorials/ohlcv-anomaly-detection.ipynb
   - Changelog: changelog.md
 
