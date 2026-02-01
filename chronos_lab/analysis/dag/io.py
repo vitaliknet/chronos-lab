@@ -4,6 +4,29 @@ from chronos_lab import logger
 from hamilton.function_modifiers import config
 
 
+@config.when(ohlcv_from_source="yfinance")
+def ohlcv_from__yfinance(ohlcv_from_config: Dict[str, Any]) -> pd.DataFrame:
+    from chronos_lab.sources import ohlcv_from_yfinance
+    return ohlcv_from_yfinance(**ohlcv_from_config)
+
+
+@config.when(ohlcv_from_source="intrinio")
+def ohlcv_from__intrinio(ohlcv_from_config: Dict[str, Any]) -> pd.DataFrame:
+    from chronos_lab.sources import ohlcv_from_intrinio
+    return ohlcv_from_intrinio(**ohlcv_from_config)
+
+
+@config.when(ohlcv_from_source="arcticdb")
+def ohlcv_from__arcticdb(ohlcv_from_config: Dict[str, Any]) -> pd.DataFrame:
+    from chronos_lab.sources import ohlcv_from_arcticdb
+    return ohlcv_from_arcticdb(**ohlcv_from_config)
+
+
+@config.when(ohlcv_from_source="disabled")
+def ohlcv_from__disabled(source_ohlcv: pd.DataFrame) -> pd.DataFrame:
+    return source_ohlcv
+
+
 @config.when(to_dataset="enabled")
 def analysis_to_dataset__enabled(analysis_result_dataset: pd.DataFrame,
                                  to_dataset_config: Dict[str, Any]

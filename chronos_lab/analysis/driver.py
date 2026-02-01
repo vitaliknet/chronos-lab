@@ -85,8 +85,9 @@ class AnalysisDriver:
 
     def detect_anomalies(
             self,
-            ohlcv: pd.DataFrame | Dict[str, pd.DataFrame],
-            *,
+            ohlcv: Optional[pd.DataFrame] = None,
+            ohlcv_from_source: str = 'disabled',
+            ohlcv_from_config: Dict[str, Any] = None,
             ohlcv_features_list: List[str] = None,
             use_adjusted: bool = True,
             isolation_forest_config: Dict[str, Any] = None,
@@ -97,6 +98,15 @@ class AnalysisDriver:
             driver_config: Dict[str, Any] = None,
     ) -> Dict[str, Any]:
         from chronos_lab.analysis.dag import standardize, features, anomaly, io
+
+        if ohlcv is None and ohlcv_from_source is None:
+            raise ValueError("Either ohlcv or ohlcv_from_source must be provided.")
+
+        if ohlcv_from_source not in ['disabled', 'yfinance', 'intrinio', 'arcticdb']:
+            raise ValueError(f"Unsupported ohlcv_from_source: {ohlcv_from_source}")
+
+        if ohlcv_from_source != 'disabled' and ohlcv_from_config is None:
+            raise ValueError("ohlcv_from_config must be provided when ohlcv_from_source is not disabled.")
 
         if ohlcv_features_list is None:
             ohlcv_features_list = ['returns', 'volume_change', 'high_low_range']
@@ -128,6 +138,8 @@ class AnalysisDriver:
             }
 
         config = {
+            'ohlcv_from_source': ohlcv_from_source,
+            'ohlcv_from_config': ohlcv_from_config,
             'use_adjusted': use_adjusted,
             'ohlcv_features_list': ohlcv_features_list,
             'to_dataset': to_dataset,

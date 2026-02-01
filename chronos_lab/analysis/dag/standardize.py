@@ -3,36 +3,36 @@ from hamilton.htypes import Parallelizable, Collect
 
 
 def standardize_ohlcv(
-        source_ohlcv: pd.DataFrame,
+        ohlcv_from: pd.DataFrame,
         use_adjusted: bool = True
 ) -> pd.DataFrame:
     """Standardize OHLCV DataFrame to consistent column names and validate MultiIndex structure."""
 
-    if isinstance(source_ohlcv, pd.DataFrame):
-        if source_ohlcv.index.nlevels != 2:
-            raise ValueError(f"Expected MultiIndex with 2 levels, got {source_ohlcv.index.nlevels}")
+    if isinstance(ohlcv_from, pd.DataFrame):
+        if ohlcv_from.index.nlevels != 2:
+            raise ValueError(f"Expected MultiIndex with 2 levels, got {ohlcv_from.index.nlevels}")
 
-        level_0_name = source_ohlcv.index.names[0]
-        level_1_name = source_ohlcv.index.names[1]
+        level_0_name = ohlcv_from.index.names[0]
+        level_1_name = ohlcv_from.index.names[1]
 
-        if level_0_name != 'date' or not isinstance(source_ohlcv.index.get_level_values(0), pd.DatetimeIndex):
+        if level_0_name != 'date' or not isinstance(ohlcv_from.index.get_level_values(0), pd.DatetimeIndex):
             raise ValueError(f"Index level 0 must be 'date' of type DatetimeIndex, got '{level_0_name}'")
 
         if level_1_name not in ['id', 'symbol']:
             raise ValueError(f"Index level 1 must be 'id' or 'symbol', got '{level_1_name}'")
 
         if level_1_name == 'id':
-            source_ohlcv.index = source_ohlcv.index.set_names('symbol', level=1)
+            ohlcv_from.index = ohlcv_from.index.set_names('symbol', level=1)
     else:
         raise ValueError("source_ohlcv must be a pandas DataFrame")
 
-    columns = set(source_ohlcv.columns)
+    columns = set(ohlcv_from.columns)
 
     has_adj = 'adj_close' in columns
     has_regular = 'close' in columns
 
     if has_adj and use_adjusted:
-        df = source_ohlcv[['adj_open', 'adj_high', 'adj_low', 'adj_close', 'adj_volume']].copy()
+        df = ohlcv_from[['adj_open', 'adj_high', 'adj_low', 'adj_close', 'adj_volume']].copy()
         df = df.rename(columns={
             'adj_open': 'open',
             'adj_high': 'high',
@@ -42,7 +42,7 @@ def standardize_ohlcv(
         })
         adjusted = True
     elif has_regular:
-        df = source_ohlcv[['open', 'high', 'low', 'close', 'volume']].copy()
+        df = ohlcv_from[['open', 'high', 'low', 'close', 'volume']].copy()
         adjusted = False
     else:
         raise ValueError("DataFrame must contain either OHLCV or adj_OHLCV columns")
