@@ -6,24 +6,28 @@ from hamilton.function_modifiers import config
 
 @config.when(ohlcv_from_source="yfinance")
 def ohlcv_from__yfinance(ohlcv_from_config: Dict[str, Any]) -> pd.DataFrame:
+    """Fetch OHLCV data from Yahoo Finance using provided configuration."""
     from chronos_lab.sources import ohlcv_from_yfinance
     return ohlcv_from_yfinance(**ohlcv_from_config)
 
 
 @config.when(ohlcv_from_source="intrinio")
 def ohlcv_from__intrinio(ohlcv_from_config: Dict[str, Any]) -> pd.DataFrame:
+    """Fetch OHLCV data from Intrinio API using provided configuration."""
     from chronos_lab.sources import ohlcv_from_intrinio
     return ohlcv_from_intrinio(**ohlcv_from_config)
 
 
 @config.when(ohlcv_from_source="arcticdb")
 def ohlcv_from__arcticdb(ohlcv_from_config: Dict[str, Any]) -> pd.DataFrame:
+    """Retrieve OHLCV data from ArcticDB storage using provided configuration."""
     from chronos_lab.sources import ohlcv_from_arcticdb
     return ohlcv_from_arcticdb(**ohlcv_from_config)
 
 
 @config.when(ohlcv_from_source="disabled")
 def ohlcv_from__disabled(source_ohlcv: pd.DataFrame) -> pd.DataFrame:
+    """Pass through source OHLCV DataFrame without fetching from external sources."""
     return source_ohlcv
 
 
@@ -31,6 +35,7 @@ def ohlcv_from__disabled(source_ohlcv: pd.DataFrame) -> pd.DataFrame:
 def analysis_to_dataset__enabled(analysis_result_dataset: pd.DataFrame,
                                  to_dataset_config: Dict[str, Any]
                                  ) -> Dict[str, Any]:
+    """Save analysis results to a named dataset with optional TTL configuration."""
     from chronos_lab.storage import to_dataset
 
     dataset_name = to_dataset_config['dataset_name']
@@ -69,6 +74,7 @@ def analysis_to_dataset__enabled(analysis_result_dataset: pd.DataFrame,
 
 @config.when(to_dataset="disabled")
 def analysis_to_dataset__disabled(analysis_result_dataset: Optional[pd.DataFrame]) -> Dict[str, Any]:
+    """Return empty result when dataset output is disabled."""
     return {}
 
 
@@ -76,6 +82,7 @@ def analysis_to_dataset__disabled(analysis_result_dataset: Optional[pd.DataFrame
 def analysis_to_arcticdb__enabled(analysis_result_arcticdb: Dict[str, Any],
                                   to_arcticdb_config: Dict[str, Any]
                                   ) -> Dict[str, Any]:
+    """Save analysis results to ArcticDB with configurable backend and symbol naming."""
     if len(analysis_result_arcticdb) > 0:
         from chronos_lab.storage import ohlcv_to_arcticdb
         ohlcv_to_arcticdb_kwargs = {k: v for k, v in to_arcticdb_config.items() if
@@ -97,4 +104,5 @@ def analysis_to_arcticdb__enabled(analysis_result_arcticdb: Dict[str, Any],
 
 @config.when(to_arcticdb="disabled")
 def analysis_to_arcticdb__disabled(analysis_result_arcticdb: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return empty result when ArcticDB output is disabled."""
     return {}

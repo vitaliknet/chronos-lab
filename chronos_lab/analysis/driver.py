@@ -15,29 +15,6 @@ class AnalysisDriver:
     caching and execution configuration. Each calculation type gets its own Driver
     (built once, reused on subsequent calls). All calculations share the same cache
     directory for maximum efficiency.
-
-    Examples:
-        Simple usage with defaults:
-            >>> from chronos_lab.analysis.driver import AnalysisDriver
-            >>>
-            >>> driver = AnalysisDriver()
-            >>> results = driver.detect_anomalies(ohlcv_df)
-
-        Custom configuration:
-            >>> driver = AnalysisDriver(
-            ...     enable_cache=True,
-            ...     max_parallel_tasks=10,
-            ...     executor_type='multiprocessing'
-            ... )
-            >>> anomalies = driver.detect_anomalies(ohlcv_df, contamination=0.02)
-
-        Per-calculation executor override:
-            >>> driver = AnalysisDriver()
-            >>> results = driver.detect_anomalies(
-            ...     ohlcv_df,
-            ...     executor_type='multiprocessing',
-            ...     max_parallel_tasks=20
-            ... )
     """
 
     def __init__(
@@ -97,6 +74,52 @@ class AnalysisDriver:
             to_arcticdb_config: Dict[str, Any] = None,
             driver_config: Dict[str, Any] = None,
     ) -> Dict[str, Any]:
+        """Detect anomalies in OHLCV time series data using Isolation Forest.
+
+        Executes a Hamilton DAG that standardizes OHLCV data, computes features,
+        applies Isolation Forest anomaly detection, and optionally persists results
+        to datasets or ArcticDB. Supports multiple data sources (Yahoo Finance,
+        Intrinio, ArcticDB) or direct DataFrame input.
+
+        Args:
+            ohlcv: Pre-loaded OHLCV DataFrame with MultiIndex (date, symbol).
+                Required if ohlcv_from_source is 'disabled'. Defaults to None.
+            ohlcv_from_source: Data source for OHLCV retrieval. Options: 'disabled'
+                (use ohlcv parameter), 'yfinance', 'intrinio', or 'arcticdb'.
+                Defaults to 'disabled'.
+            ohlcv_from_config: Configuration dictionary passed to the data source
+                function. Required when ohlcv_from_source is not 'disabled'.
+                Defaults to None.
+            ohlcv_features_list: List of feature names to compute from OHLCV data.
+                Options: 'returns', 'volume_change', 'high_low_range', 'volatility'.
+                Defaults to ['returns', 'volume_change', 'high_low_range'].
+            use_adjusted: Whether to use adjusted OHLCV columns (adj_close, etc.)
+                if available. Defaults to True.
+            isolation_forest_config: Configuration dictionary for sklearn's
+                IsolationForest. Defaults to {'contamination': 0.02,
+                'random_state': 42, 'n_estimators': 200, 'max_samples': 250}.
+            to_dataset: Whether to save anomaly results to a dataset. Options:
+                'disabled' or 'enabled'. Defaults to 'disabled'.
+            to_dataset_config: Configuration for dataset output. Defaults to
+                {'dataset_name': 'ohlcv_anomalies', 'ddb_dataset_ttl': 7}.
+            to_arcticdb: Whether to save results to ArcticDB. Options: 'disabled'
+                or 'enabled'. Defaults to 'disabled'.
+            to_arcticdb_config: Configuration for ArcticDB output. Defaults to
+                {'backend': 'LMDB', 'library_name': 'analysis',
+                'symbol_prefix': '', 'symbol_suffix': '_ohlcv_anomaly'}.
+            driver_config: Additional configuration passed to the Hamilton Driver
+                builder. Defaults to {}.
+
+        Returns:
+            Dictionary containing execution results with keys 'analysis_result'
+            (DataFrame with anomaly scores and flags), 'analysis_to_dataset'
+            (dataset save status), and 'analysis_to_arcticdb' (ArcticDB save status).
+
+        Raises:
+            ValueError: If neither ohlcv nor ohlcv_from_source is provided, or if
+                ohlcv_from_source is unsupported, or if ohlcv_from_config is missing
+                when required.
+        """
         from chronos_lab.analysis.dag import standardize, features, anomaly, io
 
         if ohlcv is None and ohlcv_from_source is None:

@@ -1,3 +1,24 @@
+"""Plotting utilities for visualizing OHLCV data with anomaly detection results.
+
+IMPORTANT: This module is NOT part of the official documented API of chronos_lab.
+It is provided as a support module for tutorial notebooks and examples only.
+This module may be modified, moved, or removed from chronos_lab at any time
+without warning or deprecation notice.
+
+DO NOT use this module in production code. If you need plotting functionality,
+copy the relevant functions to your own codebase.
+
+This module provides:
+    - plot_ohlcv_anomalies(): Generate Bloomberg-style candlestick charts with anomaly highlights
+    - human_format(): Format large numbers with K/M/B/T suffixes for axis labels
+    - bloomberg_style: Predefined mplfinance style with black background
+
+Dependencies:
+    - mplfinance: For candlestick charting
+    - matplotlib: For plot customization
+    - Requires optional dependencies not included in core chronos_lab installation
+"""
+
 import pandas as pd
 from typing import Dict, Any, Optional
 from chronos_lab.storage import to_store
@@ -60,80 +81,98 @@ def plot_ohlcv_anomalies(
 ) -> Dict[str, Any]:
     """Generate Bloomberg-style candlestick chart with highlighted anomalies.
 
-    Creates a multi-panel visualization showing OHLCV data with anomalies marked as orange
-    markers/bars. The chart includes three panels: price (candlestick), volume, and returns.
-    Uses black background with green/red coloring similar to Bloomberg Terminal.
+    Creates a three-panel visualization showing OHLCV data with anomalies marked as orange
+    markers and bars. The chart includes: (1) candlestick price panel with anomaly markers,
+    (2) volume bars panel with anomaly highlights, and (3) returns line/bar panel with
+    anomaly highlights. Uses black background with green (up) / red (down) coloring
+    similar to Bloomberg Terminal.
 
     Args:
         ohlcv_anomalies_df: DataFrame with MultiIndex (date, symbol) containing OHLCV data
             and anomaly detection results. Must include columns: 'open', 'high', 'low',
-            'close', 'volume', 'returns', 'is_anomaly'.
+            'close', 'volume', 'returns', 'is_anomaly'. Typically output from
+            AnalysisDriver.detect_anomalies().
         anomaly_period_filter: Optional period string to filter which anomalies to highlight
-            on the chart (e.g., '1m', '7d', '2w'). If None, all anomalies in the DataFrame
-            are highlighted. Defaults to None.
+            on the chart relative to the latest date in the DataFrame (e.g., '1m', '7d',
+            '2w'). If None, all anomalies in the DataFrame are highlighted. Defaults to None.
         plot_to_store: Whether to save the plot to storage using the to_store function.
-            If True, saves to S3 or local storage based on configuration. If False, returns
+            If True, saves to configured storage backend. If False, displays plot and returns
             raw plot data. Defaults to False.
         to_store_kwargs: Additional keyword arguments passed to the to_store function when
-            plot_to_store=True. Common options include 'bucket', 'prefix', 'local_path'.
-            Defaults to None.
+            plot_to_store=True. Common options: 'stores' (list: ['local'] or ['s3'] or both),
+            'folder' (subdirectory/prefix), 's3_metadata' (dict). Defaults to None.
 
     Returns:
-        Dictionary with plot metadata. If plot_to_store=False, returns {'file_name': str,
-        'content': bytes, 'mime_type': 'image/png'}. If plot_to_store=True, returns result
-        from to_store function (typically includes 's3_path' or 'local_path'). Returns empty
-        dict if no anomalies found.
+        If plot_to_store=False: Dictionary with keys 'file_name' (str), 'content' (bytes),
+            'mime_type' ('image/png').
+        If plot_to_store=True: Dictionary with storage result, typically includes
+            'local_statusCode', 'file_path' (local) or 's3_statusCode', 's3_client_response' (S3).
+        Returns empty dict {} if no anomalies found after filtering.
 
     Examples:
         Generate plot without saving to storage:
+            >>> from chronos_lab.sources import ohlcv_from_yfinance
+            >>> from chronos_lab.analysis.driver import AnalysisDriver
+            >>> from chronos_lab.plot import plot_ohlcv_anomalies
+            >>>
+            >>> # Fetch and detect anomalies
+            >>> ohlcv = ohlcv_from_yfinance(symbols=['AAPL'], period='1y')
+            >>> driver = AnalysisDriver()
+            >>> result = driver.detect_anomalies(ohlcv=ohlcv)
+            >>>
+            >>> # Generate plot for AAPL, highlighting recent month
+            >>> aapl_data = result['analysis_result'].xs('AAPL', level='symbol')
+            >>> plot_data = plot_ohlcv_anomalies(
+            ...     aapl_data,
+            ...     anomaly_period_filter='1m',
+            ...     plot_to_store=False
+            ... )
+            >>>
+            >>> # Save to file manually
+            >>> with open(plot_data['file_name'], 'wb') as f:
+            ...     f.write(plot_data['content'])
 
-        ```python
-        from chronos_lab.sources import ohlcv_from_yfinance
-        from chronos_lab.analysis import detect_ohlcv_anomalies
-        from chronos_lab.plot import plot_ohlcv_anomalies
-
-        # Detect anomalies
-        ohlcv = ohlcv_from_yfinance(symbols=['AAPL'], period='1y')
-        anomalies = detect_ohlcv_anomalies(ohlcv, output_dict=True)
-
-        # Generate plot for Apple, highlighting recent month
-        plot_data = plot_ohlcv_anomalies(
-            anomalies['AAPL'],
-            anomaly_period_filter='1m',
-            plot_to_store=False
-        )
-
-        # Save to file manually
-        with open(plot_data['file_name'], 'wb') as f:
-            f.write(plot_data['content'])
-        ```
+        Generate and save plot to local storage:
+            >>> from chronos_lab.sources import ohlcv_from_arcticdb
+            >>> from chronos_lab.analysis.driver import AnalysisDriver
+            >>> from chronos_lab.plot import plot_ohlcv_anomalies
+            >>>
+            >>> # Detect anomalies from stored data
+            >>> ohlcv = ohlcv_from_arcticdb(symbols=['TSLA'], period='6m')
+            >>> driver = AnalysisDriver()
+            >>> result = driver.detect_anomalies(ohlcv=ohlcv)
+            >>>
+            >>> # Generate plot and save to local storage
+            >>> tsla_data = result['analysis_result'].xs('TSLA', level='symbol')
+            >>> store_result = plot_ohlcv_anomalies(
+            ...     tsla_data,
+            ...     anomaly_period_filter='2w',
+            ...     plot_to_store=True,
+            ...     to_store_kwargs={'stores': ['local'], 'folder': 'anomaly_charts'}
+            ... )
+            >>> print(f"Chart saved to: {store_result['file_path']}")
 
         Generate and save plot to S3:
+            >>> store_result = plot_ohlcv_anomalies(
+            ...     tsla_data,
+            ...     anomaly_period_filter='2w',
+            ...     plot_to_store=True,
+            ...     to_store_kwargs={
+            ...         'stores': ['s3'],
+            ...         'folder': 'anomalies',
+            ...         's3_metadata': {'symbol': 'TSLA', 'type': 'anomaly_chart'}
+            ...     }
+            ... )
+            >>> if store_result['s3_statusCode'] == 0:
+            ...     print("Successfully saved to S3")
 
-        ```python
-        from chronos_lab.sources import ohlcv_from_arcticdb
-        from chronos_lab.analysis import detect_ohlcv_anomalies
-        from chronos_lab.plot import plot_ohlcv_anomalies
-
-        # Detect anomalies from stored data
-        ohlcv = ohlcv_from_arcticdb(symbols=['TSLA'], period='6m')
-        anomalies = detect_ohlcv_anomalies(
-            ohlcv,
-            generate_plots='disabled',
-            to_dataset='disabled',
-            output_dict=True
-        )
-
-        # Generate plot and save to S3
-        result = plot_ohlcv_anomalies(
-            anomalies['TSLA'],
-            anomaly_period_filter='2w',
-            plot_to_store=True,
-            to_store_kwargs={'bucket': 'my-charts-bucket', 'prefix': 'anomalies/'}
-        )
-
-        print(f"Chart saved to: {result['s3_path']}")
-        ```
+    Note:
+        - Requires mplfinance and matplotlib (not included in core chronos_lab dependencies)
+        - Chart filename format: {symbol}_anomaly_{start_date}-{end_date}.png
+        - Returns empty dict if no anomalies found (warning logged)
+        - Plot shows anomalies as orange markers/bars overlaid on normal data
+        - Volume axis uses human-readable format (K, M, B, T suffixes)
+        - Returns axis uses percentage format
     """
     if to_store_kwargs is None:
         to_store_kwargs = {}

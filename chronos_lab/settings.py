@@ -8,16 +8,26 @@ Configuration File:
     On first import of chronos_lab, the package automatically creates ~/.chronos_lab/.env
     from the bundled .env.example template if it doesn't exist. This file contains:
         - API keys (Intrinio)
-        - ArcticDB storage configuration (local path, S3 bucket, default library)
+        - ArcticDB storage configuration (backend, local path, S3 bucket, default library)
+        - Dataset storage configuration (local path, DynamoDB table and mapping)
+        - Generic store configuration (local path, S3 bucket)
+        - Hamilton cache path for DAG execution caching
         - Logging level
 
 Environment Variable Overrides:
     All settings can be overridden using environment variables with uppercase names:
         - INTRINIO_API_KEY: Intrinio API key
-        - LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR)
+        - LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        - ARCTICDB_DEFAULT_BACKEND: Default ArcticDB backend (LMDB or S3)
         - ARCTICDB_DEFAULT_LIBRARY_NAME: Default ArcticDB library name
         - ARCTICDB_LOCAL_PATH: Local filesystem path for ArcticDB LMDB backend
         - ARCTICDB_S3_BUCKET: S3 bucket name for ArcticDB S3 backend
+        - DATASET_LOCAL_PATH: Local filesystem path for dataset JSON storage
+        - DATASET_DDB_TABLE_NAME: DynamoDB table name for dataset storage
+        - DATASET_DDB_MAP: JSON mapping of dataset names to DynamoDB key structure
+        - STORE_LOCAL_PATH: Local filesystem path for generic store
+        - STORE_S3_BUCKET: S3 bucket name for generic store
+        - HAMILTON_CACHE_PATH: Path for Hamilton Driver caching
 
 Typical Usage:
     Access configuration settings:
@@ -26,11 +36,13 @@ Typical Usage:
         >>> settings = get_settings()
         >>> api_key = settings.intrinio_api_key
         >>> library_name = settings.arcticdb_default_library_name
+        >>> cache_path = settings.hamilton_cache_path
 
     Override with environment variables:
         >>> import os
         >>> os.environ['INTRINIO_API_KEY'] = 'my_custom_key'
         >>> os.environ['LOG_LEVEL'] = 'DEBUG'
+        >>> os.environ['HAMILTON_CACHE_PATH'] = '~/.chronos_lab/cache'
         >>> # Settings will reflect environment variable values
 
     Edit configuration file directly:
@@ -38,11 +50,16 @@ Typical Usage:
         >>> # INTRINIO_API_KEY=your_api_key_here
         >>> # ARCTICDB_LOCAL_PATH=~/.chronos_lab/arcticdb
         >>> # ARCTICDB_DEFAULT_LIBRARY_NAME=uscomp
+        >>> # HAMILTON_CACHE_PATH=~/.chronos_lab/cache
 
-Note:
-    - Settings are cached using @lru_cache for performance
+Important Notes:
+    - Settings are cached using @lru_cache in get_settings() for performance
+    - The get_settings() function returns a singleton instance across all calls
     - Changes to .env file or environment variables require restarting the Python process
+    - Thread-safe due to lru_cache implementation
     - Unknown settings in .env file are ignored (extra="ignore")
+    - All filesystem paths support tilde expansion (~)
+    - S3 backend requires additional AWS configuration (see arcdb module docs)
 """
 
 from functools import lru_cache
@@ -62,13 +79,15 @@ class Settings(BaseSettings):
         intrinio_api_key: Intrinio API key for accessing financial data. Required for
             using Intrinio data sources. Defaults to None.
         log_level: Logging level for the application. Valid values: 'DEBUG', 'INFO',
-            'WARNING', 'ERROR', 'CRITICAL'. Defaults to 'INFO'.
+            'WARNING', 'ERROR', 'CRITICAL'. Defaults to 'WARNING'.
+        arcticdb_default_backend: Default ArcticDB backend type. Options: 'LMDB' or 'S3'.
+            Defaults to 'LMDB'.
         arcticdb_default_library_name: Default ArcticDB library name used when none
             is specified. Defaults to 'uscomp'.
         arcticdb_local_path: Filesystem path for ArcticDB LMDB backend storage.
             Supports tilde expansion (~). Defaults to None. Example: '~/.chronos_lab/arcticdb'
-        arcticdb_s3_bucket: S3 bucket name for ArcticDB S3 backend storage. Takes
-            precedence over local_path when both are configured. Defaults to None.
+        arcticdb_s3_bucket: S3 bucket name for ArcticDB S3 backend storage.
+            Defaults to None.
         dataset_local_path: Filesystem path for local dataset JSON file storage.
             Supports tilde expansion (~). Defaults to None. Example: '~/.chronos_lab/datasets'
         dataset_ddb_table_name: DynamoDB table name for dataset storage. Required for
@@ -76,44 +95,17 @@ class Settings(BaseSettings):
         dataset_ddb_map: JSON string mapping dataset names to DynamoDB key structure.
             Maps dataset names to partition key (pk) and sort key (sk) patterns. Defaults to None.
             Example: '{"ddb_securities": {"pk": "DATASET#securities", "sk": "ticker"}}'
+        store_local_path: Filesystem path for generic local storage. Supports tilde
+            expansion (~). Defaults to None.
+        store_s3_bucket: S3 bucket name for generic storage. Defaults to None.
+        hamilton_cache_path: Filesystem path for Hamilton Driver caching. Supports tilde
+            expansion (~). Defaults to None. Example: '~/.chronos_lab/cache'
 
     Configuration:
         - Loads from: ~/.chronos_lab/.env
         - Encoding: UTF-8
         - Extra fields: Ignored (allows forward compatibility)
         - Environment variables: All settings can be overridden using uppercase env vars
-
-    Examples:
-        Access settings programmatically:
-            >>> from chronos_lab.settings import get_settings
-            >>>
-            >>> settings = get_settings()
-            >>> print(settings.intrinio_api_key)
-            >>> print(settings.arcticdb_default_library_name)
-            >>> print(settings.log_level)
-
-        Configuration file format (~/.chronos_lab/.env):
-            >>> # Intrinio API Settings
-            >>> INTRINIO_API_KEY=your_api_key_here
-            >>>
-            >>> # ArcticDB Settings
-            >>> ARCTICDB_LOCAL_PATH=~/.chronos_lab/arcticdb
-            >>> ARCTICDB_DEFAULT_LIBRARY_NAME=uscomp
-            >>> # ARCTICDB_S3_BUCKET=my-bucket  # Uncomment for S3 backend
-            >>>
-            >>> # Logging
-            >>> LOG_LEVEL=INFO
-
-        Override with environment variables:
-            >>> import os
-            >>> os.environ['INTRINIO_API_KEY'] = 'custom_key'
-            >>> os.environ['ARCTICDB_DEFAULT_LIBRARY_NAME'] = 'my_library'
-            >>> settings = get_settings()  # Will use environment values
-
-    Note:
-        - Settings are cached via @lru_cache in get_settings()
-        - Restart Python process for changes to take effect
-        - S3 backend requires additional AWS configuration (see arcdb module docs)
     """
     model_config = SettingsConfigDict(
         env_file=str(Path.home() / ".chronos_lab" / ".env"),
@@ -145,36 +137,9 @@ def get_settings() -> Settings:
 
     Returns a cached Settings object loaded from ~/.chronos_lab/.env with environment
     variable overrides. Uses @lru_cache to ensure only one Settings instance is created
-    per Python process, improving performance and ensuring consistency.
+    per Python process.
 
     Returns:
-        Settings: Singleton Settings instance with loaded configuration.
-
-    Examples:
-        Basic usage:
-            >>> from chronos_lab.settings import get_settings
-            >>>
-            >>> settings = get_settings()
-            >>> api_key = settings.intrinio_api_key
-            >>> library = settings.arcticdb_default_library_name
-
-        Multiple calls return same instance:
-            >>> settings1 = get_settings()
-            >>> settings2 = get_settings()
-            >>> assert settings1 is settings2  # Same object
-
-        Use in modules:
-            >>> # In chronos_lab/sources.py
-            >>> from chronos_lab.settings import get_settings
-            >>>
-            >>> def ohlcv_from_intrinio(**kwargs):
-            ...     settings = get_settings()
-            ...     api_key = kwargs.get('api_key') or settings.intrinio_api_key
-
-    Note:
-        - Cached with @lru_cache for performance
-        - Returns same instance across all calls in same Python process
-        - Changes to .env or environment variables require process restart
-        - Thread-safe due to lru_cache implementation
+        Singleton Settings instance with loaded configuration.
     """
     return Settings()

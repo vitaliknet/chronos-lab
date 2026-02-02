@@ -1,12 +1,17 @@
-"""Persistent storage operations for OHLCV time series data using ArcticDB.
+"""Persistent storage operations for OHLCV time series data and generic file storage.
 
-This module provides high-level functions for storing OHLCV data in ArcticDB,
-a high-performance time series database. Data can be stored from either MultiIndex
-DataFrames or dictionaries of DataFrames, with automatic symbol-level organization.
+This module provides high-level functions for storing data in multiple backends including
+ArcticDB (time series database), local JSON files (datasets), DynamoDB tables (datasets),
+local filesystem (generic files), and S3 buckets (generic files). All storage functions
+return status dictionaries for error handling.
+
+Storage Functions:
+    - ohlcv_to_arcticdb(): Store OHLCV time series in ArcticDB with symbol-level versioning
+    - to_dataset(): Save structured datasets to local JSON or DynamoDB
+    - to_store(): Save arbitrary files to local filesystem and/or S3
 
 Typical Usage:
-    Store data fetched from external sources:
-
+    Store OHLCV data in ArcticDB:
         >>> from chronos_lab.sources import ohlcv_from_yfinance
         >>> from chronos_lab.storage import ohlcv_to_arcticdb
         >>>
@@ -22,7 +27,32 @@ Typical Usage:
         ...     library_name='yfinance',
         ...     adb_mode='write'
         ... )
-        >>> print(result['statusCode'])  # 0 on success
+        >>> if result['statusCode'] == 0:
+        ...     print("Success")
+
+    Save dataset to local JSON or DynamoDB:
+        >>> from chronos_lab.storage import to_dataset
+        >>>
+        >>> data = {'AAPL': {'sector': 'Technology', 'price': 175.50}}
+        >>> result = to_dataset(dataset_name='stocks', dataset=data)
+
+    Save files to local storage or S3:
+        >>> from chronos_lab.storage import to_store
+        >>>
+        >>> content = b"file content here"
+        >>> result = to_store(
+        ...     file_name='report.pdf',
+        ...     content=content,
+        ...     stores=['local', 's3']
+        ... )
+
+Important Notes:
+    - All storage functions return dictionaries with 'statusCode': 0 (success) or -1 (failure)
+    - ArcticDB supports multiple backends: LMDB (local), S3 (cloud), or MEM (in-memory)
+    - Backend selection: Explicit 'backend' parameter overrides ARCTICDB_DEFAULT_BACKEND setting
+    - Datasets: Use 'ddb_' prefix for DynamoDB, no prefix for local JSON files
+    - File storage: Requires STORE_LOCAL_PATH or STORE_S3_BUCKET in settings
+    - ArcticDB operations include automatic version management and pruning
 """
 
 from chronos_lab import logger

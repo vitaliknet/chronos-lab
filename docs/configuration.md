@@ -51,134 +51,6 @@ HAMILTON_CACHE_PATH=~/.chronos_lab/hamilton_cache
 
 ## Configuration Options
 
-### Intrinio API
-
-#### INTRINIO_API_KEY
-
-Your Intrinio API key for accessing institutional financial data.
-
-**Required for**: Using `ohlcv_from_intrinio()` or `securities_from_intrinio()`
-
-**How to get**: Sign up at [intrinio.com](https://intrinio.com)
-
-**Example**:
-```bash
-INTRINIO_API_KEY=your_api_key_here
-```
-
-### Dataset Storage
-
-Datasets provide structured data storage for portfolio composition, watchlists, security metadata, and other non-time-series data. Datasets can be stored locally as JSON files or in AWS DynamoDB for distributed workflows.
-
-**Important**: Datasets are for structured/metadata storage, NOT time series data. Use ArcticDB for OHLCV price data.
-
-#### DATASET_LOCAL_PATH
-
-Local filesystem path for dataset JSON file storage.
-
-**Default**: `~/.chronos_lab/datasets`
-
-**Supports**: Tilde expansion (`~`)
-
-**Used by**: `to_dataset()` and `from_dataset()` for local storage
-
-**Example**:
-```bash
-DATASET_LOCAL_PATH=~/data/datasets
-```
-
-#### DATASET_DDB_TABLE_NAME
-
-AWS DynamoDB table name for dataset storage. Required for DynamoDB-backed datasets (names starting with `ddb_` prefix).
-
-**Default**: None (DynamoDB disabled)
-
-**Requires**:
-- AWS CLI configuration (see [AWS DynamoDB Setup](#aws-dynamodb-setup) below)
-- DATASET_DDB_MAP configuration
-
-**Used by**: `to_dataset()` and `from_dataset()` for datasets with `ddb_` prefix
-
-**Example**:
-```bash
-DATASET_DDB_TABLE_NAME=my-datasets-table
-```
-
-#### DATASET_DDB_MAP
-
-JSON string mapping dataset names to DynamoDB key structure. Defines partition key (pk) and sort key (sk) patterns for each DynamoDB dataset.
-
-**Default**: None
-
-**Format**: JSON object with dataset names as keys, each containing:
-- `pk`: Partition key pattern (required)
-- `sk`: Sort key field name (optional, defaults to dataset item key)
-
-**Example**:
-```bash
-DATASET_DDB_MAP='{
-    "ddb_watchlist": {
-        "pk": "map#ibpm#watchlist",
-        "sk": "name"
-    },
-    "ddb_securities_intrinio": {
-        "pk": "map#intrinio#securities"
-    },
-    "ddb_ohlcv_anomalies": {
-        "pk": "chronos_lab#ohlcv_anomalies"
-    }
-}'
-```
-
-**Use Cases**:
-
-- **Local datasets**: Portfolio composition, custom watchlists, backtesting configurations
-
-- **DynamoDB datasets**: Distributed workflows where multiple processes share datasets
-
-
-### File Storage
-
-General-purpose file storage for plots, reports, and other binary content. Supports local filesystem and S3 backends.
-
-**Important**: File storage is for arbitrary files (plots, PDFs, CSVs), NOT for time series data. Use ArcticDB for OHLCV price data and datasets for structured metadata.
-
-#### STORE_LOCAL_PATH
-
-Local filesystem path for general file storage.
-
-**Default**: `~/.chronos_lab/store`
-
-**Supports**: Tilde expansion (`~`)
-
-**Used by**: `to_store()` for saving plots, charts, and other generated files locally
-
-**Example**:
-```bash
-STORE_LOCAL_PATH=~/data/store
-```
-
-#### STORE_S3_BUCKET
-
-AWS S3 bucket name for general file storage.
-
-**Default**: None (S3 storage disabled)
-
-**Requires**: AWS CLI configuration (see [AWS S3 Setup](#aws-s3-setup) below)
-
-**Used by**: `to_store()` when `stores=['s3']` or `stores=['local', 's3']`
-
-**Example**:
-```bash
-STORE_S3_BUCKET=my-charts-bucket
-```
-
-**Common Use Cases**:
-
-- Saving analysis reports and visualizations
-
-- Sharing generated content across distributed systems
-
 ### ArcticDB Storage
 
 ArcticDB provides high-performance time series storage with support for three backend types: local LMDB, AWS S3, and in-memory. The backend selection is controlled by `ARCTICDB_DEFAULT_BACKEND` and can be overridden per operation.
@@ -302,20 +174,118 @@ prices = ohlcv_from_arcticdb(
 )
 ```
 
-### Logging
+### Dataset Storage
 
-#### LOG_LEVEL
+Datasets provide structured data storage for portfolio composition, watchlists, security metadata, and other non-time-series data. Datasets can be stored locally as JSON files or in AWS DynamoDB for distributed workflows.
 
-Logging level for chronos-lab operations.
+**Important**: Datasets are for structured/metadata storage, NOT time series data. Use ArcticDB for OHLCV price data.
 
-**Valid values**: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+#### DATASET_LOCAL_PATH
 
-**Default**: `WARNING`
+Local filesystem path for dataset JSON file storage.
+
+**Default**: `~/.chronos_lab/datasets`
+
+**Supports**: Tilde expansion (`~`)
+
+**Used by**: `to_dataset()` and `from_dataset()` for local storage
 
 **Example**:
 ```bash
-LOG_LEVEL=DEBUG
+DATASET_LOCAL_PATH=~/data/datasets
 ```
+
+#### DATASET_DDB_TABLE_NAME
+
+AWS DynamoDB table name for dataset storage. Required for DynamoDB-backed datasets (names starting with `ddb_` prefix).
+
+**Default**: None (DynamoDB disabled)
+
+**Requires**:
+- AWS CLI configuration (see [AWS DynamoDB Setup](#aws-dynamodb-setup) below)
+- DATASET_DDB_MAP configuration
+
+**Used by**: `to_dataset()` and `from_dataset()` for datasets with `ddb_` prefix
+
+**Example**:
+```bash
+DATASET_DDB_TABLE_NAME=my-datasets-table
+```
+
+#### DATASET_DDB_MAP
+
+JSON string mapping dataset names to DynamoDB key structure. Defines partition key (pk) and sort key (sk) patterns for each DynamoDB dataset.
+
+**Default**: None
+
+**Format**: JSON object with dataset names as keys, each containing:
+- `pk`: Partition key pattern (required)
+- `sk`: Sort key field name (optional, defaults to dataset item key)
+
+**Example**:
+```bash
+DATASET_DDB_MAP='{
+    "ddb_watchlist": {
+        "pk": "map#ibpm#watchlist",
+        "sk": "name"
+    },
+    "ddb_securities_intrinio": {
+        "pk": "map#intrinio#securities"
+    },
+    "ddb_ohlcv_anomalies": {
+        "pk": "chronos_lab#ohlcv_anomalies"
+    }
+}'
+```
+
+**Use Cases**:
+
+- **Local datasets**: Portfolio composition, custom watchlists, backtesting configurations
+
+- **DynamoDB datasets**: Distributed workflows where multiple processes share datasets
+
+
+### File Storage
+
+General-purpose file storage for plots, reports, and other binary content. Supports local filesystem and S3 backends.
+
+**Important**: File storage is for arbitrary files (plots, PDFs, CSVs), NOT for time series data. Use ArcticDB for OHLCV price data and datasets for structured metadata.
+
+#### STORE_LOCAL_PATH
+
+Local filesystem path for general file storage.
+
+**Default**: `~/.chronos_lab/store`
+
+**Supports**: Tilde expansion (`~`)
+
+**Used by**: `to_store()` for saving plots, charts, and other generated files locally
+
+**Example**:
+```bash
+STORE_LOCAL_PATH=~/data/store
+```
+
+#### STORE_S3_BUCKET
+
+AWS S3 bucket name for general file storage.
+
+**Default**: None (S3 storage disabled)
+
+**Requires**: AWS CLI configuration (see [AWS S3 Setup](#aws-s3-setup) below)
+
+**Used by**: `to_store()` when `stores=['s3']` or `stores=['local', 's3']`
+
+**Example**:
+```bash
+STORE_S3_BUCKET=my-charts-bucket
+```
+
+**Common Use Cases**:
+
+- Saving analysis reports and visualizations
+
+- Sharing generated content across distributed systems
 
 ### Hamilton Driver
 
@@ -330,6 +300,38 @@ Directory path for Hamilton Driver cache storage. Hamilton's caching system stor
 **Supports**: Tilde expansion (`~`)
 
 **Used by**: `AnalysisDriver` class when `enable_cache=True`
+
+
+### Intrinio API
+
+#### INTRINIO_API_KEY
+
+Your Intrinio API key for accessing institutional financial data.
+
+**Required for**: Using `ohlcv_from_intrinio()` or `securities_from_intrinio()`
+
+**How to get**: Sign up at [intrinio.com](https://intrinio.com)
+
+**Example**:
+```bash
+INTRINIO_API_KEY=your_api_key_here
+```
+
+
+### Logging
+
+#### LOG_LEVEL
+
+Logging level for chronos-lab operations.
+
+**Valid values**: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+
+**Default**: `WARNING`
+
+**Example**:
+```bash
+LOG_LEVEL=DEBUG
+```
 
 ## Environment Variable Overrides
 

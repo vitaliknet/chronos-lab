@@ -4,9 +4,15 @@ This module provides unified interfaces for fetching OHLCV (Open, High, Low, Clo
 data from multiple sources including Yahoo Finance, Intrinio API, and ArcticDB storage.
 All functions return data in consistent formats with UTC timezone-aware timestamps.
 
+Data Sources:
+    - Yahoo Finance (yfinance): Free historical and intraday market data via ohlcv_from_yfinance()
+    - Intrinio API: Institutional-quality data requiring subscription via ohlcv_from_intrinio()
+    - ArcticDB Storage: High-performance retrieval of stored data via ohlcv_from_arcticdb()
+    - Dataset Storage: Structured datasets from local JSON or DynamoDB via from_dataset()
+    - Securities List: Intrinio security metadata via securities_from_intrinio()
+
 Typical Usage:
     Fetch from Yahoo Finance and store in ArcticDB:
-
         >>> from chronos_lab.sources import ohlcv_from_yfinance
         >>> from chronos_lab.storage import ohlcv_to_arcticdb
         >>>
@@ -20,7 +26,6 @@ Typical Usage:
         >>> ohlcv_to_arcticdb(ohlcv=prices, library_name='yfinance')
 
     Retrieve stored data with date filtering:
-
         >>> from chronos_lab.sources import ohlcv_from_arcticdb
         >>>
         >>> prices = ohlcv_from_arcticdb(
@@ -28,6 +33,13 @@ Typical Usage:
         ...     period='3m',
         ...     library_name='yfinance'
         ... )
+
+Important Notes:
+    - All timestamps are UTC timezone-aware pandas DatetimeIndex
+    - OHLCV data uses consistent column names: open, high, low, close, volume
+    - Symbol identifiers vary by source: 'symbol' (Yahoo), 'id' (Intrinio)
+    - MultiIndex format: (date, symbol) or (date, id) for efficient multi-symbol operations
+    - Backend parameter available for ArcticDB operations (LMDB, S3, or MEM)
 """
 
 from chronos_lab import logger

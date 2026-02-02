@@ -7,7 +7,6 @@ These are the primary interfaces you'll use for most tasks:
 - **[Sources](sources.md)** - Fetch data from Yahoo Finance, Intrinio, ArcticDB, and Datasets
 - **[Storage](storage.md)** - Persist data to ArcticDB, Datasets, and file Store
 - **[Analysis Drivers](analysis-drivers.md)** - Analysis calculations with Hamilton DAGs
-- **[Plotting](plot.md)** - Visualize data with matplotlib/mplfinance
 - **[Settings](settings.md)** - Configuration management
 
 ## Low-Level APIs
@@ -50,15 +49,6 @@ High-level driver for composable time series analysis:
   - `detect_anomalies()` - Anomaly detection with Isolation Forest
 
 [View detailed documentation →](analysis-drivers.md)
-
-### chronos_lab.plot
-
-High-level functions for visualization:
-
-- `plot_ohlcv_anomalies()` - Create OHLCV charts with anomaly highlighting
-- `human_format()` - Format large numbers for chart labels
-
-[View detailed documentation →](plot.md)
 
 ### chronos_lab.settings
 
@@ -155,62 +145,4 @@ date                symbol
 date                      close_AAPL  close_MSFT  close_GOOGL
 2024-01-17 05:00:00+00:00     182.68      396.95       141.82
 2024-01-18 05:00:00+00:00     185.56      402.56       143.47
-```
-
-## Common Patterns
-
-### Fetching and Storing
-
-```python
-from chronos_lab.sources import ohlcv_from_yfinance
-from chronos_lab.storage import ohlcv_to_arcticdb
-
-# Fetch
-prices = ohlcv_from_yfinance(symbols=['AAPL', 'MSFT'], period='1y')
-
-# Store
-ohlcv_to_arcticdb(ohlcv=prices, library_name='yfinance')
-```
-
-### Retrieving and Analyzing
-
-```python
-from chronos_lab.sources import ohlcv_from_arcticdb
-
-# Retrieve in wide format
-prices = ohlcv_from_arcticdb(
-    symbols=['AAPL', 'MSFT'],
-    period='3m',
-    columns=['close'],
-    pivot=True,
-    library_name='yfinance'
-)
-
-# Analyze
-returns = prices.pct_change()
-correlation = returns.corr()
-```
-
-## Error Handling
-
-All functions return `None` on error and log details. Always check return values:
-
-```python
-prices = ohlcv_from_yfinance(symbols=['AAPL'], period='1y')
-if prices is None:
-    print("Failed to fetch data")
-else:
-    print(f"Fetched {len(prices)} rows")
-```
-
-For storage operations, check the status code:
-
-```python
-result = ohlcv_to_arcticdb(ohlcv=prices, library_name='yfinance')
-if result['statusCode'] == 0:
-    print("Success")
-elif result['statusCode'] == 1:
-    print(f"Partial failure: {result['skipped_symbols']}")
-else:
-    print("Complete failure")
 ```
