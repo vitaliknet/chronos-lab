@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] – 2026-02-02
+
+### Added
+- **Configurable OHLCV data sources in DAGs**:  
+  Analysis calculations can now pull data directly from multiple sources (`yfinance`, `intrinio`, or `arcticdb`) using a unified configuration interface, making it easy to switch between a variable input and external providers.
+- **Source-aware anomaly detection**:  
+  `AnalysisDriver.detect_anomalies` now supports both preloaded OHLCV DataFrames and automatic retrieval from configured data sources.
+- **Dynamic dataset and ArcticDB outputs**:  
+  Analysis results can be flexibly routed to different datasets/backends, enabling easier experimentation and storage control.
+
+### Changed
+- **`AnalysisDriver` improvements**:  
+  Streamlined configuration, clearer parameters, and a more modular design for building composable analysis workflows.
+- **OHLCV standardization**:  
+  `standardize_ohlcv` updated to work consistently across dynamically selected data sources.
+- **Validation and robustness**:  
+  Added parameter validation and safer defaults for more predictable behavior.
+- **Documentation refresh**:  
+  Expanded guides and examples reflecting the new source configuration and `AnalysisDriver`-based workflows.
+
+### Removed
+- Legacy `MCP` dependencies and related modules.
+- The deprecated `analysis.calculation` module and outdated APIs.
+- Plot module is no longer a part of the official documented API.   
+
+### Deprecated
+- Remaining legacy anomaly detection functions and parameters. Use `AnalysisDriver` going forward.
+
+
 ## [0.1.8] – 2026-01-29
 
 ### Added
@@ -109,7 +138,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP server implementation
 - Docker support and environment configuration
 
-[Unreleased]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/vitaliknet/chronos-lab/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.8...v0.2.0
 [0.1.8]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.5...v0.1.6
