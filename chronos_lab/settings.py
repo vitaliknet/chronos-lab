@@ -125,6 +125,12 @@ class Settings(BaseSettings):
     dataset_ddb_table_name: Optional[str] = None
     dataset_ddb_map: Optional[str] = None
 
+    ib_gateway_host: Optional[str] = "127.0.0.1"
+    ib_gateway_port: Optional[int] = 4001
+    ib_gateway_readonly: Optional[bool] = True
+    ib_gateway_client_id: Optional[int] = None
+    ib_gateway_account: Optional[str] = None
+
     store_local_path: Optional[str] = None
     store_s3_bucket: Optional[str] = None
 

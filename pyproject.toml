@@ -35,6 +35,7 @@ dev = [
 arcticdb = ["arcticdb"]
 yfinance = ["yfinance"]
 intrinio = ["intrinio-sdk"]
+ib = ["ib_async"]
 docs = [
     "mkdocs>=1.6.1",
     "mkdocs-material>=9.7.1",
