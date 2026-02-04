@@ -130,6 +130,8 @@ class Settings(BaseSettings):
     ib_gateway_readonly: Optional[bool] = True
     ib_gateway_client_id: Optional[int] = None
     ib_gateway_account: Optional[str] = None
+    ib_ref_data_concurrency: int = 20
+    ib_historical_data_concurrency: int = 20
 
     store_local_path: Optional[str] = None
     store_s3_bucket: Optional[str] = None
