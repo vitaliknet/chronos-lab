@@ -44,9 +44,9 @@ Important Notes:
 
 from chronos_lab import logger
 from chronos_lab.settings import get_settings
-from chronos_lab._utils import _period
+from chronos_lab._utils import _period, _map_interval_to_barsize
 from typing import List, Optional, Dict, Union, Literal
-from datetime import datetime
+from datetime import datetime, date
 import pandas as pd
 
 
@@ -686,8 +686,143 @@ def from_dataset(
         return ds.get_datasetDF(dataset_name=dataset_name)
 
 
+def ohlcv_from_ib(
+        *,
+        symbols: Optional[List[str]] = None,
+        contracts: Optional[List] = None,
+        period: Optional[str] = None,
+        start_date: Optional[str | datetime | date] = None,
+        end_date: Optional[str | datetime | date] = None,
+        interval: Optional[str] = '1d',
+        what_to_show: Optional[str] = 'ADJUSTED_LAST',
+        use_rth: Optional[bool] = True,
+        output_dict: Optional[bool] = False
+) -> Dict[str, pd.DataFrame] | pd.DataFrame | None:
+    from chronos_lab.ib import get_ib, hist_to_ohlcv
+
+    if symbols is None and contracts is None:
+        logger.error("Either symbols or contracts must be provided")
+        return None
+
+    if symbols is not None and contracts is not None:
+        logger.error("Cannot specify both symbols and contracts")
+        return None
+
+    if period is None and start_date is None:
+        logger.error("Either period or start_date must be specified")
+        return None
+
+    if period and start_date:
+        logger.error("Cannot specify both 'period' and 'start_date'")
+        return None
+
+    if end_date and what_to_show == 'ADJUSTED_LAST':
+        logger.error("Cannot specify end_date with what_to_show='ADJUSTED_LAST', use 'MIDPOINT' or 'TRADES' instead")
+        return None
+
+    try:
+        barsize = _map_interval_to_barsize(interval)
+    except ValueError as e:
+        logger.error(str(e))
+        return None
+
+    if period:
+        start_dt, end_dt = _period(period,
+                                   as_of=pd.to_datetime(end_date, utc=True) if isinstance(end_date, str) else end_date)
+    else:
+        if start_date:
+            start_dt = pd.to_datetime(start_date, utc=True) if isinstance(start_date, str) else start_date
+        else:
+            logger.error("start_date must be provided when not using period")
+            return None
+
+        if end_date:
+            end_dt = pd.to_datetime(end_date, utc=True) if isinstance(end_date, str) else end_date
+        else:
+            end_dt = pd.Timestamp.now(tz='UTC')
+
+    time_diff = end_dt - start_dt
+    total_seconds = time_diff.total_seconds()
+
+    if total_seconds <= 0:
+        logger.error("end_date must be after start_date")
+        return None
+
+    if total_seconds >= 86400:
+        days = int(total_seconds / 86400)
+        duration = f"{days} D"
+    else:
+        duration = f"{int(total_seconds)} S"
+
+    end_datetime = end_dt if end_date and what_to_show != 'ADJUSTED_LAST' else ""
+
+    try:
+        ib = get_ib()
+        if ib is None:
+            logger.error("Failed to get IB connection")
+            return None
+    except Exception as e:
+        logger.error(f"Failed to initialize IB connection: {str(e)}")
+        return None
+
+    if symbols is not None:
+        try:
+            contracts = ib.symbols_to_contracts(symbols=symbols)
+
+            if not contracts:
+                logger.error("Failed to create/qualify contracts from symbols")
+                return None
+
+        except Exception as e:
+            logger.error(f"Failed to create contracts: {str(e)}")
+            return None
+
+    try:
+        hist_data = ib.get_hist_data(
+            contracts=contracts,
+            duration=duration,
+            barsize=barsize,
+            datatype=what_to_show,
+            end_datetime=end_datetime,
+            userth=use_rth
+        )
+
+        if hist_data is None or hist_data.empty:
+            logger.error("No historical data returned from IB")
+            return None
+
+    except Exception as e:
+        logger.error(f"Failed to fetch historical data: {str(e)}")
+        return None
+
+    try:
+        ohlcv = hist_to_ohlcv(hist_data)
+
+        if ohlcv.empty:
+            logger.error("Failed to convert historical data to OHLCV format")
+            return None
+
+    except Exception as e:
+        logger.error(f"Failed to convert to OHLCV format: {str(e)}")
+        return None
+
+    if output_dict:
+        result_dict = {}
+        ohlcv_reset = ohlcv.reset_index()
+
+        for symbol in ohlcv_reset['symbol'].unique():
+            symbol_df = ohlcv_reset[ohlcv_reset['symbol'] == symbol].copy()
+            symbol_df = symbol_df.set_index('date').sort_index()
+            result_dict[symbol] = symbol_df
+
+        return result_dict
+    else:
+        return ohlcv
+
+
 __all__ = [
     'from_dataset',
+    'ohlcv_from_ib',
     'ohlcv_from_intrinio',
     'ohlcv_from_yfinance',
     'ohlcv_from_arcticdb',

@@ -1,12 +1,15 @@
 from chronos_lab import logger
 from chronos_lab.settings import get_settings
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Literal, Dict, Any, TypeAlias
+from datetime import datetime, date
 import asyncio
 from asyncio import Semaphore
 from ib_async import IB, util, Contract, RealTimeBar
 import pandas as pd
 
 settings = get_settings()
+
+SecType: TypeAlias = Literal['STK', 'CASH', 'IND', 'FUT', 'CRYPTO', 'CMDTY']
 
 
 class IBMarketData:
@@ -96,15 +99,19 @@ class IBMarketData:
                       duration,
                       barsize,
                       datatype,
+                      end_datetime: Optional[str | datetime | date] = '',
                       userth=True):
 
         hist_data = []
         for contract in contracts:
             logger.info('Requesting historical data for %s', contract)
 
+            if contract.conId == 0:
+                self.conn.qualifyContracts(contract)
+
             hist_data_contract = util.df(self.conn.reqHistoricalData(
                 contract,
-                endDateTime='',
+                endDateTime=end_datetime,
                 durationStr=duration,
                 barSizeSetting=barsize,
                 whatToShow=datatype,
@@ -133,12 +140,16 @@ class IBMarketData:
                                    duration,
                                    barsize,
                                    datatype,
+                                   end_datetime: Optional[str | datetime | date] = '',
                                    userth=True):
         try:
             async with self._historical_data_sem:
+                if contract.conId == 0:
+                    await self.conn.qualifyContractsAsync(contract)
+
                 bars = await self.conn.reqHistoricalDataAsync(
                     contract,
-                    endDateTime='',
+                    endDateTime=end_datetime,
                     durationStr=duration,
                     barSizeSetting=barsize,
                     whatToShow=datatype,
@@ -163,13 +174,15 @@ class IBMarketData:
             logger.error(f'Failed to get historical data for {contract}: {e}')
             return pd.DataFrame()
 
-    async def get_hist_data_async(self, contracts, duration, barsize, datatype, userth=True):
+    async def get_hist_data_async(self, contracts, duration, barsize, datatype,
+                                  end_datetime: Optional[str | datetime | date] = '',
+                                  userth=True):
         logger.info(f'Requesting historical data for {len(contracts)} contracts')
 
         async with asyncio.TaskGroup() as tg:
             tasks = [
                 tg.create_task(
-                    self.get_hist_data_single(contract, duration, barsize, datatype, userth)
+                    self.get_hist_data_single(contract, duration, barsize, datatype, end_datetime, userth)
                 )
                 for contract in contracts
             ]
@@ -242,9 +255,9 @@ class IBMarketData:
                 logger.warning('Contract is already subscribed to receive bars: %s', c)
 
     async def sub_bar_single(self,
-                      contract,
-                      realtime=False,
-                      **kwargs):
+                             contract,
+                             realtime=False,
+                             **kwargs):
         try:
             async with self._historical_data_sem:
                 if contract.conId == 0:
@@ -329,6 +342,76 @@ class IBMarketData:
         else:
             return pd.DataFrame()
 
+    def _create_contracts(
+            self,
+            symbols: List[str],
+            sec_type: SecType,
+            exchange: str,
+            currency: str
+    ) -> List[Contract]:
+        contracts = []
+
+        for symbol in symbols:
+            try:
+                if sec_type == 'CASH':
+                    contract = Contract(secType='CASH', symbol=symbol, currency=currency)
+                else:
+                    contract = Contract(secType=sec_type, symbol=symbol, exchange=exchange, currency=currency)
+
+                contracts.append(contract)
+
+            except Exception as e:
+                logger.error(f"Failed to create contract for {symbol}: {e}")
+                continue
+
+        return contracts
+
+    def symbols_to_contracts(
+            self,
+            symbols: List[str],
+            sec_type: SecType = 'STK',
+            exchange: str = 'SMART',
+            currency: str = 'USD'
+    ) -> List[Contract]:
+
+        contracts = self._create_contracts(symbols, sec_type, exchange, currency)
+
+        if not contracts:
+            logger.warning("No contracts created from symbols")
+            return []
+
+        try:
+            logger.info(f"Qualifying {len(contracts)} contracts")
+            qualified = self.conn.qualifyContracts(*contracts)
+            logger.info(f"Successfully qualified {len(qualified)} contracts")
+            return qualified
+        except Exception as e:
+            logger.error(f"Failed to qualify contracts: {e}")
+            return []
+
+    async def symbols_to_contracts_async(
+            self,
+            symbols: List[str],
+            sec_type: SecType = 'STK',
+            exchange: str = 'SMART',
+            currency: str = 'USD'
+    ) -> List[Contract]:
+
+        contracts = self._create_contracts(symbols, sec_type, exchange, currency)
+
+        if not contracts:
+            logger.warning("No contracts created from symbols")
+            return []
+
+        try:
+            logger.info(f"Qualifying {len(contracts)} contracts asynchronously")
+            qualified = await self.conn.qualifyContractsAsync(*contracts)
+            logger.info(f"Successfully qualified {len(qualified)} contracts")
+            return qualified
+        except Exception as e:
+            logger.error(f"Failed to qualify contracts: {e}")
+            return []
+
     def lookup_cds(self, contracts):
         for c in contracts:
             if c.conId == 0:
@@ -404,13 +487,15 @@ def get_ib(ib: Optional[IB] = None) -> IBMarketData:
 
 
 def hist_to_ohlcv(hist_data):
-    index_cols = ['date', 'symbol', 'conId']
-    value_cols = ['open', 'high', 'low', 'close', 'volume']
+    index_cols = ['date', 'symbol']
+    value_cols = ['open', 'high', 'low', 'close', 'volume', 'conId']
+
+    if len(hist_data) == 0:
+        return pd.DataFrame(columns=index_cols + value_cols).set_index(index_cols)
 
     ohlcv = hist_data.reset_index()
     ohlcv['symbol'] = [x.symbol for x in ohlcv.contract]
     ohlcv['conId'] = [x.conId for x in ohlcv.contract]
     ohlcv = ohlcv[index_cols + value_cols].set_index(index_cols)
-    ohlcv.columns = pd.MultiIndex.from_tuples(('ohlcv', i) for i in value_cols)
 
     return ohlcv
