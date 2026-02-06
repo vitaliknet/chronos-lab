@@ -40,37 +40,3 @@ def _period(period: str, as_of: Optional[pd.Timestamp] = None) -> tuple[pd.Times
     start_dt = end_dt - offset_map[unit]
     return (start_dt, end_dt)
 
-
-def _map_interval_to_barsize(interval: str) -> str:
-    interval_mapping = {
-        '1s': '1 secs',
-        '5s': '5 secs',
-        '10s': '10 secs',
-        '15s': '15 secs',
-        '30s': '30 secs',
-        '1m': '1 min',
-        '2m': '2 mins',
-        '3m': '3 mins',
-        '5m': '5 mins',
-        '10m': '10 mins',
-        '15m': '15 mins',
-        '20m': '20 mins',
-        '30m': '30 mins',
-        '1h': '1 hour',
-        '2h': '2 hours',
-        '3h': '3 hours',
-        '4h': '4 hours',
-        '8h': '8 hours',
-        '1d': '1 day',
-        '1w': '1 week',
-        '1wk': '1 week',
-        '1mo': '1 month',
-    }
-
-    if interval not in interval_mapping:
-        raise ValueError(
-            f"Unsupported interval '{interval}'. Supported intervals: "
-            f"{', '.join(sorted(interval_mapping.keys()))}"
-        )
-
-    return interval_mapping[interval]

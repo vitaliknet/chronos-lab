@@ -44,7 +44,7 @@ Important Notes:
 
 from chronos_lab import logger
 from chronos_lab.settings import get_settings
-from chronos_lab._utils import _period, _map_interval_to_barsize
+from chronos_lab._utils import _period
 from typing import List, Optional, Dict, Union, Literal
 from datetime import datetime, date
 import pandas as pd
@@ -698,7 +698,7 @@ def ohlcv_from_ib(
         use_rth: Optional[bool] = True,
         output_dict: Optional[bool] = False
 ) -> Dict[str, pd.DataFrame] | pd.DataFrame | None:
-    from chronos_lab.ib import get_ib, hist_to_ohlcv
+    from chronos_lab.ib import get_ib, hist_to_ohlcv, map_interval_to_barsize, calculate_ib_params
 
     if symbols is None and contracts is None:
         logger.error("Either symbols or contracts must be provided")
@@ -721,7 +721,7 @@ def ohlcv_from_ib(
         return None
 
     try:
-        barsize = _map_interval_to_barsize(interval)
+        barsize = map_interval_to_barsize(interval)
     except ValueError as e:
         logger.error(str(e))
         return None
@@ -741,20 +741,23 @@ def ohlcv_from_ib(
         else:
             end_dt = pd.Timestamp.now(tz='UTC')
 
-    time_diff = end_dt - start_dt
-    total_seconds = time_diff.total_seconds()
-
-    if total_seconds <= 0:
-        logger.error("end_date must be after start_date")
+    try:
+        ib_params = calculate_ib_params(start_dt, end_dt, barsize)
+    except ValueError as e:
+        logger.error(f"Failed to calculate IB API parameters: {str(e)}")
         return None
 
-    if total_seconds >= 86400:
-        days = int(total_seconds / 86400)
-        duration = f"{days} D"
-    else:
-        duration = f"{int(total_seconds)} S"
+    duration = ib_params['duration_str']
+    end_datetime = ib_params['end_datetime'] if end_date and what_to_show != 'ADJUSTED_LAST' else ""
+    effective_start = ib_params['effective_start']
 
-    end_datetime = end_dt if end_date and what_to_show != 'ADJUSTED_LAST' else ""
+    if ib_params['will_overfetch']:
+        logger.warning(
+            f"IB API constraints require fetching {ib_params['overfetch_days']} extra days of data. "
+            f"Requested: {start_dt.date()} to {end_dt.date()}, "
+            f"will fetch from: {effective_start.date()}. "
+            f"Results will be filtered to requested range."
+        )
 
     try:
         ib = get_ib()
@@ -801,6 +804,12 @@ def ohlcv_from_ib(
         if ohlcv.empty:
             logger.error("Failed to convert historical data to OHLCV format")
             return None
+
+        if ib_params['will_overfetch']:
+            ohlcv_reset = ohlcv.reset_index()
+            ohlcv_reset = ohlcv_reset[ohlcv_reset['date'] >= start_dt]
+            ohlcv = ohlcv_reset.set_index(['date', 'symbol'])
+            logger.info(f"Filtered results to requested date range: {len(ohlcv)} rows")
 
     except Exception as e:
         logger.error(f"Failed to convert to OHLCV format: {str(e)}")
