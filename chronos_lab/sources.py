@@ -686,19 +686,23 @@ def from_dataset(
         return ds.get_datasetDF(dataset_name=dataset_name)
 
 
-def ohlcv_from_ib(
+def _prepare_ib_params(
         *,
         symbols: Optional[List[str]] = None,
         contracts: Optional[List] = None,
         period: Optional[str] = None,
         start_date: Optional[str | datetime | date] = None,
         end_date: Optional[str | datetime | date] = None,
-        interval: Optional[str] = '1d',
-        what_to_show: Optional[str] = 'ADJUSTED_LAST',
-        use_rth: Optional[bool] = True,
-        output_dict: Optional[bool] = False
-) -> Dict[str, pd.DataFrame] | pd.DataFrame | None:
-    from chronos_lab.ib import get_ib, hist_to_ohlcv, map_interval_to_barsize, calculate_ib_params
+        interval: str = '1d',
+        what_to_show: str = 'ADJUSTED_LAST',
+) -> Optional[Dict]:
+    """Validate inputs and calculate IB API parameters.
+
+    Returns:
+        Dictionary with keys: barsize, start_dt, end_dt, duration, end_datetime, ib_params
+        Returns None if validation fails.
+    """
+    from chronos_lab.ib import map_interval_to_barsize, calculate_ib_params
 
     if symbols is None and contracts is None:
         logger.error("Either symbols or contracts must be provided")
@@ -759,6 +763,116 @@ def ohlcv_from_ib(
             f"Results will be filtered to requested range."
         )
 
+    return {
+        'barsize': barsize,
+        'start_dt': start_dt,
+        'end_dt': end_dt,
+        'duration': duration,
+        'end_datetime': end_datetime,
+        'ib_params': ib_params,
+    }
+
+
+def _format_ib_output(
+        ohlcv: pd.DataFrame,
+        ib_params: Dict,
+        start_dt: pd.Timestamp,
+        output_dict: bool
+) -> Dict[str, pd.DataFrame] | pd.DataFrame:
+    """Format OHLCV output with filtering and dict conversion.
+
+    Args:
+        ohlcv: OHLCV DataFrame with MultiIndex (date, symbol)
+        ib_params: IB parameters dict containing 'will_overfetch' flag
+        start_dt: Start datetime for filtering
+        output_dict: If True, return dict mapping symbols to DataFrames
+
+    Returns:
+        Formatted DataFrame or dictionary of DataFrames
+    """
+
+    if ib_params['will_overfetch']:
+        ohlcv_reset = ohlcv.reset_index()
+        ohlcv_reset = ohlcv_reset[ohlcv_reset['date'] >= start_dt]
+        ohlcv = ohlcv_reset.set_index(['date', 'symbol'])
+        logger.info(f"Filtered results to requested date range: {len(ohlcv)} rows")
+
+    if output_dict:
+        result_dict = {}
+        ohlcv_reset = ohlcv.reset_index()
+
+        for symbol in ohlcv_reset['symbol'].unique():
+            symbol_df = ohlcv_reset[ohlcv_reset['symbol'] == symbol].copy()
+            symbol_df = symbol_df.set_index('date').sort_index()
+            result_dict[symbol] = symbol_df
+
+        return result_dict
+    else:
+        return ohlcv
+
+
+def ohlcv_from_ib(
+        *,
+        symbols: Optional[List[str]] = None,
+        contracts: Optional[List] = None,
+        period: Optional[str] = None,
+        start_date: Optional[str | datetime | date] = None,
+        end_date: Optional[str | datetime | date] = None,
+        interval: Optional[str] = '1d',
+        what_to_show: Optional[str] = 'ADJUSTED_LAST',
+        use_rth: Optional[bool] = True,
+        output_dict: Optional[bool] = False
+) -> Dict[str, pd.DataFrame] | pd.DataFrame | None:
+    """Download OHLCV data from Interactive Brokers (synchronous version).
+
+    Fetches historical price data for multiple symbols or contracts using the Interactive Brokers
+    API via ib_async. This is the synchronous version - use ohlcv_from_ib_async for async contexts.
+
+    Args:
+        symbols: List of ticker symbols to download. Mutually exclusive with contracts.
+        contracts: List of IB Contract objects. Mutually exclusive with symbols.
+        period: Relative time period (e.g., '1d', '5d', '1mo', '1y').
+            Mutually exclusive with start_date/end_date.
+        start_date: Start date as 'YYYY-MM-DD' string or datetime object (inclusive).
+            Mutually exclusive with period.
+        end_date: End date as 'YYYY-MM-DD' string or datetime object (exclusive).
+            Defaults to current time if start_date is provided without end_date.
+        interval: Data frequency interval. Options include:
+            - Intraday: '1m', '5m', '15m', '30m', '1h', '2h', '4h'
+            - Daily+: '1d', '1w', '1M'
+            Defaults to '1d' (daily).
+        what_to_show: Type of data to retrieve. Options:
+            - 'ADJUSTED_LAST': Split/dividend adjusted (default, no end_date allowed)
+            - 'TRADES': Actual traded prices
+            - 'MIDPOINT': Bid/ask midpoint
+            - 'BID', 'ASK': Bid or ask prices only
+        use_rth: If True, return only Regular Trading Hours data.
+            If False, include extended hours. Defaults to True.
+        output_dict: If True, returns dict mapping symbols to DataFrames.
+            If False, returns single MultiIndex DataFrame with (date, symbol) levels.
+            Defaults to False.
+
+    Returns:
+        If output_dict=True: Dictionary mapping symbol strings to DataFrames, where each
+            DataFrame has DatetimeIndex and columns ['open', 'high', 'low', 'close', 'volume', 'symbol'].
+        If output_dict=False: Single DataFrame with MultiIndex (date, symbol) and same columns.
+        Returns None if no data could be retrieved or on error.
+
+    """
+    from chronos_lab.ib import get_ib, hist_to_ohlcv
+
+    params = _prepare_ib_params(
+        symbols=symbols,
+        contracts=contracts,
+        period=period,
+        start_date=start_date,
+        end_date=end_date,
+        interval=interval,
+        what_to_show=what_to_show
+    )
+    if params is None:
+        return None
+
     try:
         ib = get_ib()
         if ib is None:
@@ -783,10 +897,10 @@ def ohlcv_from_ib(
     try:
         hist_data = ib.get_hist_data(
             contracts=contracts,
-            duration=duration,
-            barsize=barsize,
+            duration=params['duration'],
+            barsize=params['barsize'],
             datatype=what_to_show,
-            end_datetime=end_datetime,
+            end_datetime=params['end_datetime'],
             userth=use_rth
         )
 
@@ -805,33 +919,132 @@ def ohlcv_from_ib(
             logger.error("Failed to convert historical data to OHLCV format")
             return None
 
-        if ib_params['will_overfetch']:
-            ohlcv_reset = ohlcv.reset_index()
-            ohlcv_reset = ohlcv_reset[ohlcv_reset['date'] >= start_dt]
-            ohlcv = ohlcv_reset.set_index(['date', 'symbol'])
-            logger.info(f"Filtered results to requested date range: {len(ohlcv)} rows")
+    except Exception as e:
+        logger.error(f"Failed to convert to OHLCV format: {str(e)}")
+        return None
+
+    return _format_ib_output(ohlcv, params['ib_params'], params['start_dt'], output_dict)
+
+
+async def ohlcv_from_ib_async(
+        *,
+        symbols: Optional[List[str]] = None,
+        contracts: Optional[List] = None,
+        period: Optional[str] = None,
+        start_date: Optional[str | datetime | date] = None,
+        end_date: Optional[str | datetime | date] = None,
+        interval: Optional[str] = '1d',
+        what_to_show: Optional[str] = 'ADJUSTED_LAST',
+        use_rth: Optional[bool] = True,
+        output_dict: Optional[bool] = False
+) -> Dict[str, pd.DataFrame] | pd.DataFrame | None:
+    """Download OHLCV data from Interactive Brokers (asynchronous version).
+
+    Asynchronous version of ohlcv_from_ib. Fetches historical price data for multiple symbols
+    or contracts using the Interactive Brokers API with concurrent requests for better performance.
+
+    Args:
+        symbols: List of ticker symbols to download. Mutually exclusive with contracts.
+        contracts: List of IB Contract objects. Mutually exclusive with symbols.
+        period: Relative time period (e.g., '1d', '5d', '1mo', '1y').
+            Mutually exclusive with start_date/end_date.
+        start_date: Start date as 'YYYY-MM-DD' string or datetime object (inclusive).
+            Mutually exclusive with period.
+        end_date: End date as 'YYYY-MM-DD' string or datetime object (exclusive).
+            Defaults to current time if start_date is provided without end_date.
+        interval: Data frequency interval. Options include:
+            - Intraday: '1m', '5m', '15m', '30m', '1h', '2h', '4h'
+            - Daily+: '1d', '1w', '1M'
+            Defaults to '1d' (daily).
+        what_to_show: Type of data to retrieve. Options:
+            - 'ADJUSTED_LAST': Split/dividend adjusted (default, no end_date allowed)
+            - 'TRADES': Actual traded prices
+            - 'MIDPOINT': Bid/ask midpoint
+            - 'BID', 'ASK': Bid or ask prices only
+        use_rth: If True, return only Regular Trading Hours data.
+            If False, include extended hours. Defaults to True.
+        output_dict: If True, returns dict mapping symbols to DataFrames.
+            If False, returns single MultiIndex DataFrame with (date, symbol) levels.
+            Defaults to False.
+
+    Returns:
+        If output_dict=True: Dictionary mapping symbol strings to DataFrames, where each
+            DataFrame has DatetimeIndex and columns ['open', 'high', 'low', 'close', 'volume', 'symbol'].
+        If output_dict=False: Single DataFrame with MultiIndex (date, symbol) and same columns.
+        Returns None if no data could be retrieved or on error.
+
+    """
+    from chronos_lab.ib import get_ib, hist_to_ohlcv
+
+    params = _prepare_ib_params(
+        symbols=symbols,
+        contracts=contracts,
+        period=period,
+        start_date=start_date,
+        end_date=end_date,
+        interval=interval,
+        what_to_show=what_to_show
+    )
+    if params is None:
+        return None
+
+    try:
+        ib = get_ib()
+        if ib is None:
+            logger.error("Failed to get IB connection")
+            return None
+    except Exception as e:
+        logger.error(f"Failed to initialize IB connection: {str(e)}")
+        return None
+
+    if symbols is not None:
+        try:
+            contracts = await ib.symbols_to_contracts_async(symbols=symbols)
+
+            if not contracts:
+                logger.error("Failed to create/qualify contracts from symbols")
+                return None
+
+        except Exception as e:
+            logger.error(f"Failed to create contracts: {str(e)}")
+            return None
+
+    try:
+        hist_data = await ib.get_hist_data_async(
+            contracts=contracts,
+            duration=params['duration'],
+            barsize=params['barsize'],
+            datatype=what_to_show,
+            end_datetime=params['end_datetime'],
+            userth=use_rth
+        )
+
+        if hist_data is None or hist_data.empty:
+            logger.error("No historical data returned from IB")
+            return None
+
+    except Exception as e:
+        logger.error(f"Failed to fetch historical data: {str(e)}")
+        return None
+
+    try:
+        ohlcv = hist_to_ohlcv(hist_data)
+
+        if ohlcv.empty:
+            logger.error("Failed to convert historical data to OHLCV format")
+            return None
 
     except Exception as e:
         logger.error(f"Failed to convert to OHLCV format: {str(e)}")
         return None
 
-    if output_dict:
-        result_dict = {}
-        ohlcv_reset = ohlcv.reset_index()
-
-        for symbol in ohlcv_reset['symbol'].unique():
-            symbol_df = ohlcv_reset[ohlcv_reset['symbol'] == symbol].copy()
-            symbol_df = symbol_df.set_index('date').sort_index()
-            result_dict[symbol] = symbol_df
-
-        return result_dict
-    else:
-        return ohlcv
+    return _format_ib_output(ohlcv, params['ib_params'], params['start_dt'], output_dict)
 
 
 __all__ = [
     'from_dataset',
     'ohlcv_from_ib',
+    'ohlcv_from_ib_async',
     'ohlcv_from_intrinio',
     'ohlcv_from_yfinance',
     'ohlcv_from_arcticdb',
