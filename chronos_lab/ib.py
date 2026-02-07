@@ -807,6 +807,7 @@ def calculate_ib_params(
         ValueError: If the requested period is invalid or exceeds API limits
 
     """
+    from dateutil.relativedelta import relativedelta
     import math
 
     time_diff = end_dt - start_dt
@@ -854,14 +855,19 @@ def calculate_ib_params(
         # For daily/weekly/monthly bars, we can use year units
         if barsize in ['1 day', '1 week', '1 month']:
             # Calculate how many years needed
-            days_requested = total_seconds / 86400
-            years_needed = math.ceil(days_requested / 365)
+            delta = relativedelta(end_dt, start_dt)
+            years_needed = math.ceil(delta.years + (delta.months > 0 or delta.days > 0))
 
             duration_str = f"{years_needed} Y"
             effective_start = end_dt - pd.DateOffset(years=years_needed)
-            will_overfetch = True
+
             overfetch_seconds = (effective_start - start_dt).total_seconds()
             overfetch_days = abs(int(overfetch_seconds / 86400))
+
+            if overfetch_days > 0:
+                will_overfetch = True
+            else:
+                will_overfetch = False
 
             return {
                 'duration_str': duration_str,

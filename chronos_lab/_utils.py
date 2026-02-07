@@ -27,6 +27,9 @@ def _period(period: str, as_of: Optional[pd.Timestamp] = None) -> tuple[pd.Times
     unit = period[-1] if period[-1].isalpha() else period[-2:]
 
     offset_map = {
+        'H': pd.DateOffset(hours=value),
+        'M': pd.DateOffset(minutes=value),
+        'S': pd.DateOffset(seconds=value),
         'd': pd.DateOffset(days=value),
         'w': pd.DateOffset(weeks=value),
         'mo': pd.DateOffset(months=value),
@@ -35,7 +38,7 @@ def _period(period: str, as_of: Optional[pd.Timestamp] = None) -> tuple[pd.Times
     }
 
     if unit not in offset_map:
-        raise ValueError(f"Invalid period unit: {unit}. Use 'd', 'w', 'mo'/'m', or 'y'")
+        raise ValueError(f"Invalid period unit: {unit}. Use 'H', 'M', 'S', d', 'w', 'mo'/'m', or 'y'")
 
     start_dt = end_dt - offset_map[unit]
     return (start_dt, end_dt)
