@@ -48,7 +48,7 @@ The goal isn’t novelty—it’s leverage. chronos-lab makes the tools you alre
 
 ## Key Features
 
-**Unified Market Data Access** : Pull OHLCV time series from Yahoo Finance, Intrinio, or ArcticDB through a single, consistent interface — analysis-ready, UTC-normalized, and pandas-native from day one.
+**Unified Market Data Access** : Pull OHLCV time series from Yahoo Finance, Intrinio, Interactive Brokers, or ArcticDB through a single, consistent interface — analysis-ready, UTC-normalized, and pandas-native from day one. Stream real-time tick and bar data from IB for live analysis workflows.
 
 **Research-Grade Time Series Storage** : Store and retrieve large, versioned time series with ArcticDB, optimized for long histories, cross-sectional analysis, and rapid iteration across large universes.
 

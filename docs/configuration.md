@@ -13,8 +13,11 @@ On first import, chronos-lab automatically creates `~/.chronos_lab/.env` from th
 ### Default Contents
 
 ```bash
-# Intrinio API Settings
-#INTRINIO_API_KEY=
+# ArcticDB Settings
+ARCTICDB_DEFAULT_BACKEND="LMDB"
+ARCTICDB_LOCAL_PATH=~/.chronos_lab/arcticdb
+ARCTICDB_DEFAULT_LIBRARY_NAME=uscomp
+#ARCTICDB_S3_BUCKET=
 
 # Datatset Settings
 DATASET_LOCAL_PATH=~/.chronos_lab/datasets
@@ -32,21 +35,27 @@ DATASET_LOCAL_PATH=~/.chronos_lab/datasets
 #    }
 #}'
 
-# Store Settings
-STORE_LOCAL_PATH=~/.chronos_lab/store
-#STORE_S3_BUCKET=
+# Hamilton Driver Settings
+HAMILTON_CACHE_PATH=~/.chronos_lab/hamilton_cache
 
-# ArcticDB Settings
-ARCTICDB_DEFAULT_BACKEND=lmdb
-ARCTICDB_LOCAL_PATH=~/.chronos_lab/arcticdb
-ARCTICDB_DEFAULT_LIBRARY_NAME=uscomp
-#ARCTICDB_S3_BUCKET=
+# Interactive Brokers Settings
+IB_GATEWAY_HOST=127.0.0.1
+IB_GATEWAY_PORT=4001
+IB_GATEWAY_READONLY=True
+IB_GATEWAY_CLIENT_ID=12
+#IB_GATEWAY_ACCOUNT=
+#IB_REF_DATA_CONCURRENCY=
+#IB_HISTORICAL_DATA_CONCURRENCY=
+
+# Intrinio API Settings
+#INTRINIO_API_KEY=
 
 # Logging
 LOG_LEVEL=WARNING
 
-# Hamilton Driver Settings
-HAMILTON_CACHE_PATH=~/.chronos_lab/hamilton_cache
+# Store Settings
+STORE_LOCAL_PATH=~/.chronos_lab/store
+#STORE_S3_BUCKET=
 ```
 
 ## Configuration Options
@@ -302,6 +311,97 @@ Directory path for Hamilton Driver cache storage. Hamilton's caching system stor
 **Used by**: `AnalysisDriver` class when `enable_cache=True`
 
 
+### Interactive Brokers
+
+Interactive Brokers settings for connecting to IB Gateway or Trader Workstation (TWS) to retrieve real-time and historical market data.
+
+**Requirements**:
+- Interactive Brokers account (paper trading or live)
+- IB Gateway or TWS running and configured to accept API connections
+- `chronos-lab[ib]` extra installed
+
+#### IB_GATEWAY_HOST
+
+Hostname or IP address of the IB Gateway or TWS instance.
+
+**Default**: `127.0.0.1` (localhost)
+
+**Used by**: `get_ib()`, `ohlcv_from_ib()`, `ohlcv_from_ib_async()`, and `IBMarketData.connect()`
+
+#### IB_GATEWAY_PORT
+
+Port number for connecting to IB Gateway or TWS.
+
+**Default**: `4001`
+
+**Common ports**:
+- `4001`: IB Gateway paper trading
+- `4002`: IB Gateway live trading
+- `7496`: TWS paper trading
+- `7497`: TWS live trading
+
+**Used by**: `get_ib()`, `ohlcv_from_ib()`, `ohlcv_from_ib_async()`, and `IBMarketData.connect()`
+
+#### IB_GATEWAY_READONLY
+
+Read-only connection mode. When `True`, prevents order placement and account modifications.
+
+**Default**: `True`
+
+**Valid values**: `True`, `False`
+
+**Used by**: `IBMarketData.connect()`
+
+**Important**: Always use `True` for data retrieval workflows to prevent accidental trading operations.
+
+#### IB_GATEWAY_CLIENT_ID
+
+Unique client ID for the IB API connection. Each connection must have a unique client ID.
+
+**Default**: `12`
+
+**Valid values**: Any positive integer
+
+**Used by**: `IBMarketData.connect()`
+
+**Note**: If running multiple applications connecting to the same Gateway/TWS instance, each must use a different client ID.
+
+#### IB_GATEWAY_ACCOUNT
+
+IB account identifier for the connection.
+
+**Default**: None (uses primary account)
+
+**Format**: Account number (e.g., `DU1234567` for paper trading, `U1234567` for live)
+
+**Used by**: `IBMarketData.connect()`
+
+**Required when**: Account has multiple sub-accounts or for explicit account selection
+
+#### IB_REF_DATA_CONCURRENCY
+
+Maximum number of concurrent reference data requests (contract details lookups) to IB API. Controls rate limiting for asynchronous operations.
+
+**Default**: `20`
+
+**Valid values**: Positive integer (recommended: 10-50)
+
+**Used by**: Async methods in `IBMarketData` class for contract qualification and details lookup
+
+**Note**: Setting too high may trigger IB API rate limits. Adjust based on your connection type and IB account.
+
+#### IB_HISTORICAL_DATA_CONCURRENCY
+
+Maximum number of concurrent historical data requests to IB API. Controls rate limiting for asynchronous data retrieval operations.
+
+**Default**: `20`
+
+**Valid values**: Positive integer (recommended: 10-50)
+
+**Used by**: `ohlcv_from_ib_async()` and async methods in `IBMarketData` class
+
+**Note**: IB API has rate limits on historical data requests. Adjust based on your account type and subscription level.
+
 ### Intrinio API
 
 #### INTRINIO_API_KEY
@@ -346,6 +446,8 @@ All settings can be overridden using environment variables. This is useful for:
 export INTRINIO_API_KEY="my_api_key"
 export DATASET_DDB_TABLE_NAME="prod-datasets"
 export ARCTICDB_DEFAULT_LIBRARY_NAME="production"
+export IB_GATEWAY_PORT="7497"
+export IB_GATEWAY_ACCOUNT="U1234567"
 export LOG_LEVEL="WARNING"
 
 python my_script.py
@@ -520,6 +622,9 @@ print(f"Store Local Path: {settings.store_local_path}")
 print(f"Store S3 Bucket: {settings.store_s3_bucket}")
 print(f"ArcticDB Path: {settings.arcticdb_local_path}")
 print(f"Default Library: {settings.arcticdb_default_library_name}")
+print(f"IB Gateway Host: {settings.ib_gateway_host}")
+print(f"IB Gateway Port: {settings.ib_gateway_port}")
+print(f"IB Gateway Client ID: {settings.ib_gateway_client_id}")
 print(f"Log Level: {settings.log_level}")
 ```
 
@@ -544,6 +649,9 @@ export DATASET_DDB_TABLE_NAME=prod-datasets-table
 export STORE_S3_BUCKET=prod-charts-bucket
 export ARCTICDB_S3_BUCKET=prod-timeseries
 export ARCTICDB_DEFAULT_LIBRARY_NAME=production
+export IB_GATEWAY_HOST=prod-ib-gateway.internal
+export IB_GATEWAY_PORT=4002
+export IB_GATEWAY_ACCOUNT=U1234567
 export LOG_LEVEL=WARNING
 ```
 
@@ -562,6 +670,9 @@ ENV INTRINIO_API_KEY=your_key
 ENV DATASET_DDB_TABLE_NAME=my-datasets-table
 ENV STORE_S3_BUCKET=my-charts-bucket
 ENV ARCTICDB_S3_BUCKET=my-bucket
+ENV IB_GATEWAY_HOST=host.docker.internal
+ENV IB_GATEWAY_PORT=4001
+ENV IB_GATEWAY_CLIENT_ID=12
 ENV LOG_LEVEL=INFO
 ```
 
@@ -598,6 +709,20 @@ grep INTRINIO_API_KEY ~/.chronos_lab/.env
 
 Make sure there are no extra spaces or quotes around the key.
 
+### Interactive Brokers connection errors
+
+**Symptom**: "Connection refused" or "Failed to connect to IB"
+
+**Solution**: Verify IB Gateway/TWS is running and configured:
+1. Check IB Gateway or TWS is running
+2. Verify API connections are enabled (Configuration → API → Settings)
+3. Confirm port matches your configuration:
+   ```bash
+   grep IB_GATEWAY_PORT ~/.chronos_lab/.env
+   ```
+4. Check firewall allows connections on the specified port
+5. Ensure client ID is unique if running multiple applications
+
 ## Best Practices
 
 1. **Never commit `.env` files** - Add to `.gitignore`
@@ -606,3 +731,5 @@ Make sure there are no extra spaces or quotes around the key.
 4. **Use separate configurations per environment** - dev/staging/prod
 5. **Monitor API usage** - Especially for paid services like Intrinio
 6. **Back up S3 buckets** - Enable versioning and replication
+7. **Use read-only mode for IB connections** - Keep `IB_GATEWAY_READONLY=True` for data retrieval workflows
+8. **Use unique client IDs** - Assign different `IB_GATEWAY_CLIENT_ID` values for each application connecting to IB

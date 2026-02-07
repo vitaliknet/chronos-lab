@@ -12,7 +12,14 @@ def _period(period: str, as_of: Optional[pd.Timestamp] = None) -> tuple[pd.Times
     """Convert period string to date range tuple.
 
     Args:
-        period: Period string (e.g., '7d', '4w', '3mo', '1y')
+        period: Period string. Supported formats:
+            - Seconds: '30S', '60S'
+            - Minutes: '5M', '30M'
+            - Hours: '1H', '4H', '24H'
+            - Days: '7d', '14d'
+            - Weeks: '4w'
+            - Months: '3mo' or '3m'
+            - Years: '1y', '2y'
         as_of: Reference timestamp (defaults to current UTC time)
 
     Returns:

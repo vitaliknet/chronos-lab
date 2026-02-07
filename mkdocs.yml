@@ -99,6 +99,7 @@ nav:
       - DAG Modules: api/analysis-dag.md
     - Low-Level APIs:
       - ArcticDB Wrapper: api/arcdb.md
+      - Interactive Brokers: api/ib.md
       - Intrinio Wrapper: api/intrinio.md
       - AWS Integration: api/aws.md
       - Dataset Management: api/dataset.md

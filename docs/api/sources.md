@@ -8,6 +8,7 @@ The `chronos_lab.sources` module provides unified interfaces for fetching data f
 
 - **Yahoo Finance**: Free market data via yfinance
 - **Intrinio**: Institutional-quality financial data (requires API subscription)
+- **Interactive Brokers**: Real-time and historical market data (requires IB Gateway/TWS)
 - **ArcticDB**: Retrieve previously stored time series data
 - **Datasets**: Load structured data (portfolios, watchlists, security metadata)
 
@@ -21,6 +22,16 @@ All functions return data in consistent formats with UTC timezone-aware timestam
       heading_level: 3
 
 ::: chronos_lab.sources.ohlcv_from_intrinio
+    options:
+      show_root_heading: true
+      heading_level: 3
+
+::: chronos_lab.sources.ohlcv_from_ib
+    options:
+      show_root_heading: true
+      heading_level: 3
+
+::: chronos_lab.sources.ohlcv_from_ib_async
     options:
       show_root_heading: true
       heading_level: 3

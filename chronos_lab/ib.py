@@ -1,3 +1,65 @@
+"""Interactive Brokers market data integration for real-time and historical data.
+
+This module provides the IBMarketData singleton class for connecting to Interactive Brokers
+TWS/Gateway and retrieving market data including real-time ticks, historical bars, and
+streaming OHLCV data. It wraps the ib_async library with chronos-lab conventions.
+
+Key Features:
+    - Singleton connection management to IB Gateway/TWS
+    - Real-time tick data subscription and retrieval
+    - Historical and real-time bar data subscription
+    - Asynchronous batch operations with semaphore-controlled concurrency
+    - Contract creation, qualification, and details lookup
+    - Automatic timezone handling (UTC) and data formatting
+
+Connection Configuration:
+    IB connection parameters are configured via environment variables in ~/.chronos_lab/.env:
+        - IB_GATEWAY_HOST: Gateway/TWS hostname (default: 127.0.0.1)
+        - IB_GATEWAY_PORT: Gateway/TWS port (default: 4002 for Gateway, 7497 for TWS)
+        - IB_GATEWAY_READONLY: Read-only mode (default: True)
+        - IB_GATEWAY_CLIENT_ID: Client ID for connection (default: 1)
+        - IB_GATEWAY_ACCOUNT: IB account identifier
+        - IB_REF_DATA_CONCURRENCY: Max concurrent reference data requests (default: 10)
+        - IB_HISTORICAL_DATA_CONCURRENCY: Max concurrent historical data requests (default: 10)
+
+Typical Usage:
+    Singleton pattern with automatic connection:
+        >>> from chronos_lab.ib import get_ib
+        >>>
+        >>> # Get singleton instance and connect
+        >>> ib = get_ib()
+        >>>
+        >>> # Subscribe to streaming bars
+        >>> contract_ids = ib.subscribe_bars(
+        ...     symbols=['AAPL', 'MSFT'],
+        ...     period='1d',
+        ...     interval='5m'
+        ... )
+        >>>
+        >>> # Retrieve current bars
+        >>> df = ib.get_bars(symbols=['AAPL', 'MSFT'])
+        >>>
+        >>> # Clean disconnect
+        >>> ib.disconnect()
+
+    Asynchronous historical data retrieval:
+        >>> import asyncio
+        >>> from chronos_lab.ib import get_ib
+        >>>
+        >>> ib = get_ib()
+        >>> contracts = ib.symbols_to_contracts(['AAPL', 'MSFT', 'GOOGL'])
+        >>>
+        >>> # Fetch historical data asynchronously
+        >>> hist_data = asyncio.run(
+        ...     ib.get_hist_data_async(
+        ...         contracts=contracts,
+        ...         duration='30 D',
+        ...         barsize='1 hour',
+        ...         datatype='TRADES'
+        ...     )
+        ... )
+"""
+
 from chronos_lab import logger
 from chronos_lab.settings import get_settings
 from typing import Optional, List, Literal, Dict, Any, TypeAlias
@@ -13,6 +75,38 @@ SecType: TypeAlias = Literal['STK', 'CASH', 'IND', 'FUT', 'CRYPTO', 'CMDTY']
 
 
 class IBMarketData:
+    """Singleton class for Interactive Brokers market data operations.
+
+    Provides centralized connection management and data retrieval from Interactive Brokers
+    TWS/Gateway. Supports real-time tick subscriptions, historical data requests, streaming
+    bars, and contract lookups. Uses singleton pattern to ensure a single connection instance
+    across the application.
+
+    The class maintains internal state for active subscriptions (ticks, bars) and cached
+    contract details. Supports both synchronous and asynchronous operations with semaphore-
+    controlled concurrency for API rate limiting.
+
+    Attributes:
+        conn: Active IB connection instance from ib_async library. None if not connected.
+        _connected: Boolean indicating whether connection is established.
+        ticks: Dictionary mapping contract IDs to real-time tick data objects.
+        bars: Nested dictionary containing OHLCV bar data and contract mappings.
+            Structure: {'ohlcv': {conId: bars}, 'contract': {conId: contract}}
+        contract_details: Dictionary mapping contract IDs to cached contract detail objects.
+        gen_tick_list: Default generic tick list string for market data subscriptions
+            (includes shortcuts, option volume, IV, etc.).
+        _ref_data_sem: Asyncio semaphore controlling concurrent reference data requests.
+        _historical_data_sem: Asyncio semaphore controlling concurrent historical data requests.
+        _ticks_cols: List of column names for tick data DataFrame output.
+        _bars_cols: List of column names for bar data DataFrame output.
+
+    Note:
+        - This class uses the singleton pattern. Use get_instance() or get_ib() to obtain instance.
+        - Connection parameters are read from chronos_lab settings (configured in ~/.chronos_lab/.env).
+        - All datetime values are converted to UTC timezone-aware timestamps.
+        - Subscriptions remain active until explicitly cancelled or disconnected.
+        - Contract IDs (conId) are used as primary keys for data storage and retrieval.
+    """
     conn: Optional[IB] = None
     _instance: Optional["IBMarketData"] = None
     _connected: bool = False
@@ -41,6 +135,11 @@ class IBMarketData:
 
     @classmethod
     def get_instance(cls) -> "IBMarketData":
+        """Get or create the singleton IBMarketData instance.
+
+        Returns:
+            The singleton IBMarketData instance. Creates a new instance if one doesn't exist.
+        """
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -53,6 +152,30 @@ class IBMarketData:
             client_id: Optional[int] = None,
             account: Optional[str] = None,
     ) -> bool:
+        """Connect to Interactive Brokers TWS or Gateway.
+
+        Establishes connection to IB using provided parameters or defaults from settings.
+        If already connected, returns True without creating a new connection.
+
+        Args:
+            host: TWS/Gateway hostname or IP address. If None, uses IB_GATEWAY_HOST from
+                settings (default: 127.0.0.1).
+            port: TWS/Gateway port number. If None, uses IB_GATEWAY_PORT from settings
+                (default: 4002 for Gateway, 7497 for TWS).
+            readonly: Read-only mode flag. If None, uses IB_GATEWAY_READONLY from settings
+                (default: True).
+            client_id: Client ID for connection. If None, uses IB_GATEWAY_CLIENT_ID from
+                settings (default: 1). Must be unique per connection.
+            account: IB account identifier. If None, uses IB_GATEWAY_ACCOUNT from settings.
+
+        Returns:
+            True if connection successful or already connected, False on connection failure.
+
+        Note:
+            - Connection parameters default to values in ~/.chronos_lab/.env
+            - Uses ib_async IB.connect() for underlying connection
+            - Sets _connected flag on successful connection
+        """
         if self._connected:
             logger.info("Already connected to IB")
             return True
@@ -81,6 +204,19 @@ class IBMarketData:
             return False
 
     def disconnect(self):
+        """Disconnect from Interactive Brokers and clean up active subscriptions.
+
+        Automatically unsubscribes from all active tick and bar subscriptions before
+        disconnecting. Safe to call even if not connected.
+
+        Returns:
+            Result of IB.disconnect() if connected, None if not connected.
+
+        Note:
+            - Cleans up all tick subscriptions via unsub_ticks()
+            - Cleans up all bar subscriptions via unsub_bars()
+            - Resets _connected flag
+        """
         if not self._connected:
             logger.error('There is no active connection to IB gateway')
             return None
@@ -101,6 +237,34 @@ class IBMarketData:
                       datatype,
                       end_datetime: Optional[str | datetime | date] = '',
                       userth=True):
+        """Retrieve historical bar data for multiple contracts synchronously.
+
+        Fetches historical OHLCV data for a list of contracts using IB's reqHistoricalData.
+        Automatically qualifies contracts if needed. Returns a MultiIndex DataFrame indexed
+        by (contract, datatype, date).
+
+        Args:
+            contracts: List of ib_async Contract objects to retrieve data for.
+            duration: IB duration string (e.g., '1 D', '2 W', '30 D', '1 Y').
+            barsize: IB bar size string (e.g., '1 min', '5 mins', '1 hour', '1 day').
+            datatype: IB data type string ('TRADES', 'MIDPOINT', 'BID', 'ASK', 'BID_ASK',
+                'ADJUSTED_LAST', 'HISTORICAL_VOLATILITY', 'OPTION_IMPLIED_VOLATILITY').
+            end_datetime: End date/time for historical data. Empty string (default) uses
+                current time. Accepts string, datetime, or date objects.
+            userth: Use Regular Trading Hours only. True (default) for RTH, False for
+                extended hours.
+
+        Returns:
+            MultiIndex DataFrame with index (contract, datatype, date) and columns
+            ['open', 'high', 'low', 'close', 'volume', 'barsize']. Returns empty
+            DataFrame if no data available for any contract.
+
+        Note:
+            - Date column is converted to UTC timezone-aware timestamps
+            - Contracts with conId=0 are automatically qualified
+            - Each contract is fetched sequentially (for async, use get_hist_data_async)
+            - Warnings logged for contracts with no data
+        """
 
         hist_data = []
         for contract in contracts:
@@ -142,6 +306,31 @@ class IBMarketData:
                                    datatype,
                                    end_datetime: Optional[str | datetime | date] = '',
                                    userth=True):
+        """Asynchronously retrieve historical data for a single contract with rate limiting.
+
+        Internal async method for fetching historical data with semaphore-controlled
+        concurrency. Used by get_hist_data_async for parallel batch operations.
+
+        Args:
+            contract: Single ib_async Contract object to retrieve data for.
+            duration: IB duration string (e.g., '1 D', '2 W', '30 D', '1 Y').
+            barsize: IB bar size string (e.g., '1 min', '5 mins', '1 hour', '1 day').
+            datatype: IB data type string ('TRADES', 'MIDPOINT', 'BID', 'ASK', etc.).
+            end_datetime: End date/time for historical data. Empty string (default) uses
+                current time. Accepts string, datetime, or date objects.
+            userth: Use Regular Trading Hours only. True (default) for RTH, False for
+                extended hours.
+
+        Returns:
+            DataFrame with columns ['date', 'open', 'high', 'low', 'close', 'volume',
+            'datatype', 'contract', 'barsize']. Returns empty DataFrame on error.
+
+        Note:
+            - Uses _historical_data_sem semaphore for rate limiting
+            - Automatically qualifies contract if conId=0
+            - Date column converted to UTC timezone-aware timestamps
+            - Logs errors and returns empty DataFrame on failure
+        """
         try:
             async with self._historical_data_sem:
                 if contract.conId == 0:
@@ -177,6 +366,33 @@ class IBMarketData:
     async def get_hist_data_async(self, contracts, duration, barsize, datatype,
                                   end_datetime: Optional[str | datetime | date] = '',
                                   userth=True):
+        """Asynchronously retrieve historical data for multiple contracts in parallel.
+
+        Fetches historical OHLCV data for multiple contracts concurrently using asyncio
+        TaskGroup. Rate-limited by _historical_data_sem semaphore. Returns a MultiIndex
+        DataFrame indexed by (contract, datatype, date).
+
+        Args:
+            contracts: List of ib_async Contract objects to retrieve data for.
+            duration: IB duration string (e.g., '1 D', '2 W', '30 D', '1 Y').
+            barsize: IB bar size string (e.g., '1 min', '5 mins', '1 hour', '1 day').
+            datatype: IB data type string ('TRADES', 'MIDPOINT', 'BID', 'ASK', etc.).
+            end_datetime: End date/time for historical data. Empty string (default) uses
+                current time. Accepts string, datetime, or date objects.
+            userth: Use Regular Trading Hours only. True (default) for RTH, False for
+                extended hours.
+
+        Returns:
+            MultiIndex DataFrame with index (contract, datatype, date) and columns
+            ['open', 'high', 'low', 'close', 'volume', 'barsize']. Returns empty
+            DataFrame if no valid data retrieved for any contract.
+
+        Note:
+            - Uses asyncio.TaskGroup for concurrent execution
+            - Concurrency controlled by IB_HISTORICAL_DATA_CONCURRENCY setting
+            - Logs progress: total contracts requested and successfully retrieved
+            - Failed contracts are skipped (logged as warnings)
+        """
         logger.info(f'Requesting historical data for {len(contracts)} contracts')
 
         async with asyncio.TaskGroup() as tg:
@@ -201,6 +417,24 @@ class IBMarketData:
     def sub_ticks(self,
                   contracts,
                   gen_tick_list=''):
+        """Subscribe to real-time tick data for specified contracts.
+
+        Initiates real-time market data subscriptions for a list of contracts. Automatically
+        qualifies contracts if needed. Stores ticker objects in self.ticks keyed by contract ID.
+
+        Args:
+            contracts: List of ib_async Contract objects to subscribe to.
+            gen_tick_list: Comma-separated string of generic tick types (e.g., '104,106,165').
+                Empty string (default) subscribes to basic ticks only. Use self.gen_tick_list
+                for a comprehensive set including shortcuts, option volume, and implied volatility.
+
+        Note:
+            - Contracts with conId=0 are automatically qualified
+            - Skips contracts already subscribed (logs warning)
+            - Ticker objects stored in self.ticks[conId]
+            - Use get_ticks() to retrieve current tick data as DataFrame
+            - Use unsub_ticks() to cancel subscriptions
+        """
         for c in contracts:
             if c.conId == 0:
                 self.conn.qualifyContracts(c)
@@ -211,6 +445,19 @@ class IBMarketData:
 
     def unsub_ticks(self,
                     contract_ids=None):
+        """Unsubscribe from real-time tick data subscriptions.
+
+        Cancels market data subscriptions for specified contracts or all active subscriptions.
+
+        Args:
+            contract_ids: List of contract IDs (integers) to unsubscribe. If None (default),
+                unsubscribes from all active tick subscriptions and clears self.ticks.
+
+        Note:
+            - Uses IB.cancelMktData() to cancel subscriptions
+            - Removes unsubscribed contracts from self.ticks dictionary
+            - Safe to call even if no active subscriptions
+        """
         if contract_ids:
             for cid in contract_ids:
                 self.conn.cancelMktData(self.ticks[cid].contract)
@@ -221,6 +468,26 @@ class IBMarketData:
             self.ticks = {}
 
     def get_ticks(self, allcols=False):
+        """Retrieve current tick data as a DataFrame for all subscribed contracts.
+
+        Converts active ticker objects to a pandas DataFrame with symbol index. Automatically
+        handles timezone conversion (UTC) and calculates market price.
+
+        Args:
+            allcols: If True, returns all available columns (drops only columns with all NaN).
+                If False (default), returns only standard tick columns defined in _ticks_cols:
+                ['time', 'symbol', 'last', 'lastSize', 'bid', 'bidSize', 'ask', 'askSize',
+                'open', 'high', 'low', 'close', 'conId', 'marketPrice'].
+
+        Returns:
+            DataFrame indexed by symbol with tick data columns. Returns empty DataFrame with
+            standard columns if no active subscriptions.
+
+        Note:
+            - Time column is converted to UTC timezone-aware timestamps
+            - marketPrice is calculated via ticker.marketPrice() method
+            - Symbol and conId columns added from contract objects
+        """
         if len(self.ticks) > 0:
             ticks_df = util.df(self.ticks.values())
 
@@ -242,6 +509,28 @@ class IBMarketData:
                  contracts,
                  realtime=False,
                  **kwargs):
+        """Subscribe to historical or real-time bar data for specified contracts.
+
+        Initiates bar data subscriptions for a list of contracts. Supports both historical
+        bars with keepUpToDate=True and real-time 5-second bars. Stores bar data in
+        self.bars['ohlcv'] and contract references in self.bars['contract'].
+
+        Args:
+            contracts: List of ib_async Contract objects to subscribe to.
+            realtime: If False (default), subscribes to historical bars (requires kwargs).
+                If True, subscribes to real-time 5-second bars via reqRealTimeBars.
+            **kwargs: Keyword arguments passed to IB.reqHistoricalData() when realtime=False.
+                Required parameters: endDateTime, durationStr, barSizeSetting, whatToShow,
+                useRTH, keepUpToDate, formatDate.
+
+        Note:
+            - Contracts with conId=0 are automatically qualified
+            - Skips contracts already subscribed (logs warning)
+            - Bar data stored in self.bars['ohlcv'][conId]
+            - Contract objects stored in self.bars['contract'][conId]
+            - Use get_bars() to retrieve bar data as DataFrame
+            - Use unsub_bars() to cancel subscriptions
+        """
         for c in contracts:
             if c.conId == 0:
                 self.conn.qualifyContracts(c)
@@ -258,6 +547,28 @@ class IBMarketData:
                              contract,
                              realtime=False,
                              **kwargs):
+        """Asynchronously subscribe to bar data for a single contract with rate limiting.
+
+        Internal async method for subscribing to bars with semaphore-controlled concurrency.
+        Used by sub_bars_async for parallel batch subscriptions.
+
+        Args:
+            contract: Single ib_async Contract object to subscribe to.
+            realtime: If False (default), subscribes to historical bars (requires kwargs).
+                If True, subscribes to real-time 5-second bars.
+            **kwargs: Keyword arguments passed to IB.reqHistoricalDataAsync() when
+                realtime=False. Required parameters: endDateTime, durationStr,
+                barSizeSetting, whatToShow, useRTH, keepUpToDate, formatDate.
+
+        Returns:
+            True if subscription successful, False if already subscribed or error occurred.
+
+        Note:
+            - Uses _historical_data_sem semaphore for rate limiting
+            - Automatically qualifies contract if conId=0
+            - Stores bar data in self.bars['ohlcv'][conId]
+            - Stores contract in self.bars['contract'][conId]
+        """
         try:
             async with self._historical_data_sem:
                 if contract.conId == 0:
@@ -281,6 +592,28 @@ class IBMarketData:
             return False
 
     async def sub_bars_async(self, contracts, realtime=False, **kwargs):
+        """Asynchronously subscribe to bar data for multiple contracts in parallel.
+
+        Subscribes to bar data for multiple contracts concurrently using asyncio TaskGroup.
+        Rate-limited by _historical_data_sem semaphore.
+
+        Args:
+            contracts: List of ib_async Contract objects to subscribe to.
+            realtime: If False (default), subscribes to historical bars (requires kwargs).
+                If True, subscribes to real-time 5-second bars.
+            **kwargs: Keyword arguments passed to IB.reqHistoricalDataAsync() when
+                realtime=False. Required parameters: endDateTime, durationStr,
+                barSizeSetting, whatToShow, useRTH, keepUpToDate, formatDate.
+
+        Returns:
+            Integer count of successfully subscribed contracts.
+
+        Note:
+            - Uses asyncio.TaskGroup for concurrent execution
+            - Concurrency controlled by IB_HISTORICAL_DATA_CONCURRENCY setting
+            - Logs progress: total contracts requested and successfully subscribed
+            - Failed or already-subscribed contracts are skipped
+        """
         logger.info(f'Subscribing to bars for {len(contracts)} contracts')
 
         async with asyncio.TaskGroup() as tg:
@@ -296,6 +629,21 @@ class IBMarketData:
 
     def unsub_bars(self,
                    contract_ids=None):
+        """Unsubscribe from bar data subscriptions.
+
+        Cancels bar data subscriptions (historical or real-time) for specified contracts
+        or all active subscriptions.
+
+        Args:
+            contract_ids: List of contract IDs (integers) to unsubscribe. If None (default),
+                unsubscribes from all active bar subscriptions and clears self.bars.
+
+        Note:
+            - Automatically detects subscription type (RealTimeBar vs Historical)
+            - Uses IB.cancelRealTimeBars() or IB.cancelHistoricalData() accordingly
+            - Removes unsubscribed contracts from self.bars['ohlcv'] and self.bars['contract']
+            - Safe to call even if no active subscriptions
+        """
         if contract_ids:
             for cid in contract_ids:
                 if not isinstance(self.bars['ohlcv'][cid][0], RealTimeBar):
@@ -324,6 +672,46 @@ class IBMarketData:
             ohlcv: bool = True,
             allcols: bool = False
     ):
+        """Retrieve bar data as DataFrame for subscribed contracts with flexible filtering.
+
+        Retrieves and filters bar data from active subscriptions. Supports filtering by
+        contract/symbol, date range, or head/tail selection. Returns data in OHLCV format
+        (indexed by date and symbol) or contract format (indexed by contract and date).
+
+        Args:
+            contracts: List of contracts to retrieve. Can be contract IDs (int) or Contract
+                objects. If None, retrieves all subscribed contracts. Mutually exclusive with
+                symbols parameter.
+            symbols: List of symbol strings to retrieve (e.g., ['AAPL', 'MSFT']). Matched
+                against subscribed contracts. Mutually exclusive with contracts parameter.
+            start_date: Start date for filtering (inclusive). Accepts string, datetime, or
+                date objects. Converted to UTC. Mutually exclusive with first/last.
+            end_date: End date for filtering (inclusive). Accepts string, datetime, or date
+                objects. Converted to UTC. Mutually exclusive with first/last.
+            first: Return first N bars per contract after sorting by date. Mutually exclusive
+                with last and start_date/end_date.
+            last: Return last N bars per contract after sorting by date. Mutually exclusive
+                with first and start_date/end_date.
+            ohlcv: If True (default), returns OHLCV format indexed by (date, symbol). If False,
+                returns contract format indexed by (contract, date).
+            allcols: If True, includes all available columns. If False (default), includes
+                only standard columns (['open', 'high', 'low', 'close', 'volume', 'conId']
+                for OHLCV format, or _bars_cols for contract format).
+
+        Returns:
+            DataFrame with bar data. Index and columns depend on ohlcv and allcols parameters.
+            Returns empty DataFrame if no subscriptions or no matching data.
+
+        Raises:
+            Error logged if conflicting parameters specified (first/last with dates, both
+            contracts and symbols, or both first and last).
+
+        Note:
+            - Date column is always UTC timezone-aware
+            - Empty bar lists are skipped
+            - 'time' column renamed to 'date' for real-time bars
+            - 'open_' column renamed to 'open' if present
+        """
         if (first is not None or last is not None) and (start_date is not None or end_date is not None):
             logger.error("Cannot use first/last with start_date/end_date")
             return pd.DataFrame()
@@ -448,6 +836,26 @@ class IBMarketData:
             exchange: str,
             currency: str
     ) -> List[Contract]:
+        """Create unqualified IB Contract objects from symbol strings.
+
+        Internal method for constructing Contract objects before qualification. Handles
+        special cases for different security types (e.g., CASH pairs).
+
+        Args:
+            symbols: List of symbol strings (e.g., ['AAPL', 'MSFT'] or ['EURUSD']).
+            sec_type: Security type ('STK', 'CASH', 'IND', 'FUT', 'CRYPTO', 'CMDTY').
+            exchange: Exchange code (e.g., 'SMART', 'NYSE', 'NASDAQ'). Not used for CASH.
+            currency: Currency code (e.g., 'USD', 'EUR'). For CASH, this is the quote currency.
+
+        Returns:
+            List of unqualified Contract objects (conId=0). Empty list if all contracts fail.
+
+        Note:
+            - CASH contracts are created without exchange parameter
+            - Non-CASH contracts include exchange in constructor
+            - Failed contracts are logged and skipped (not included in return list)
+            - Contracts must be qualified before use with IB API
+        """
         contracts = []
 
         for symbol in symbols:
@@ -472,6 +880,29 @@ class IBMarketData:
             exchange: str = 'SMART',
             currency: str = 'USD'
     ) -> List[Contract]:
+        """Convert symbol strings to qualified IB Contract objects synchronously.
+
+        Creates Contract objects from symbols and qualifies them with IB to obtain contract
+        IDs and full details. Uses IB.qualifyContracts() for synchronous qualification.
+
+        Args:
+            symbols: List of symbol strings to convert (e.g., ['AAPL', 'MSFT', 'GOOGL']).
+            sec_type: Security type. Defaults to 'STK' (stocks). Options: 'STK', 'CASH',
+                'IND', 'FUT', 'CRYPTO', 'CMDTY'.
+            exchange: Exchange code. Defaults to 'SMART' (IB smart routing). Common values:
+                'NYSE', 'NASDAQ', 'CBOE', 'IDEALPRO' (for forex).
+            currency: Currency code. Defaults to 'USD'. Use 'EUR', 'GBP', etc. for other
+                currencies. For CASH pairs, this is the quote currency.
+
+        Returns:
+            List of qualified Contract objects with conId populated. Empty list if creation
+            or qualification fails.
+
+        Note:
+            - Requires active IB connection
+            - Failed symbols are logged and excluded from results
+            - For async version with rate limiting, use symbols_to_contracts_async()
+        """
 
         contracts = self._create_contracts(symbols, sec_type, exchange, currency)
 
@@ -495,6 +926,30 @@ class IBMarketData:
             exchange: str = 'SMART',
             currency: str = 'USD'
     ) -> List[Contract]:
+        """Asynchronously convert symbol strings to qualified IB Contract objects.
+
+        Creates Contract objects from symbols and qualifies them with IB to obtain contract
+        IDs and full details. Uses IB.qualifyContractsAsync() for asynchronous qualification.
+
+        Args:
+            symbols: List of symbol strings to convert (e.g., ['AAPL', 'MSFT', 'GOOGL']).
+            sec_type: Security type. Defaults to 'STK' (stocks). Options: 'STK', 'CASH',
+                'IND', 'FUT', 'CRYPTO', 'CMDTY'.
+            exchange: Exchange code. Defaults to 'SMART' (IB smart routing). Common values:
+                'NYSE', 'NASDAQ', 'CBOE', 'IDEALPRO' (for forex).
+            currency: Currency code. Defaults to 'USD'. Use 'EUR', 'GBP', etc. for other
+                currencies. For CASH pairs, this is the quote currency.
+
+        Returns:
+            List of qualified Contract objects with conId populated. Empty list if creation
+            or qualification fails.
+
+        Note:
+            - Requires active IB connection
+            - Failed symbols are logged and excluded from results
+            - Logs qualification progress
+            - For synchronous version, use symbols_to_contracts()
+        """
 
         contracts = self._create_contracts(symbols, sec_type, exchange, currency)
 
@@ -512,6 +967,21 @@ class IBMarketData:
             return []
 
     def lookup_cds(self, contracts):
+        """Look up and cache contract details synchronously for multiple contracts.
+
+        Retrieves detailed contract information from IB and stores in self.contract_details.
+        Uses cached values for contracts already looked up.
+
+        Args:
+            contracts: List of ib_async Contract objects to look up details for.
+
+        Note:
+            - Automatically qualifies contracts if conId=0
+            - Skips contracts already in cache (logs warning)
+            - Stores results in self.contract_details[conId]
+            - Use get_cds() to retrieve details as DataFrame
+            - For async version with rate limiting, use lookup_cds_async()
+        """
         for c in contracts:
             if c.conId == 0:
                 self.conn.qualifyContracts(c)
@@ -524,6 +994,23 @@ class IBMarketData:
                 Contract(conId=c.conId))
 
     async def lookup_cd_single(self, contract):
+        """Asynchronously look up contract details for a single contract with rate limiting.
+
+        Internal async method for retrieving contract details with semaphore-controlled
+        concurrency. Used by lookup_cds_async for parallel batch operations.
+
+        Args:
+            contract: Single ib_async Contract object to look up details for.
+
+        Returns:
+            True if lookup successful, False if already cached or error occurred.
+
+        Note:
+            - Uses _ref_data_sem semaphore for rate limiting
+            - Automatically qualifies contract if conId=0
+            - Stores results in self.contract_details[conId]
+            - Logs errors and returns False on failure
+        """
         try:
             async with self._ref_data_sem:
                 if contract.conId == 0:
@@ -542,6 +1029,24 @@ class IBMarketData:
             return False
 
     async def lookup_cds_async(self, contracts):
+        """Asynchronously look up contract details for multiple contracts in parallel.
+
+        Retrieves contract details for multiple contracts concurrently using asyncio TaskGroup.
+        Rate-limited by _ref_data_sem semaphore. Stores results in self.contract_details.
+
+        Args:
+            contracts: List of ib_async Contract objects to look up details for.
+
+        Returns:
+            Integer count of successfully looked up contracts (excluding already cached).
+
+        Note:
+            - Uses asyncio.TaskGroup for concurrent execution
+            - Concurrency controlled by IB_REF_DATA_CONCURRENCY setting
+            - Logs progress: total contracts requested and successfully retrieved
+            - Failed or already-cached contracts are skipped
+            - Use get_cds() to retrieve details as DataFrame
+        """
         logger.info(f'Looking up contract details for {len(contracts)} contracts')
 
         async with asyncio.TaskGroup() as tg:
@@ -557,6 +1062,22 @@ class IBMarketData:
         return success_count
 
     def get_cds(self):
+        """Retrieve cached contract details as a DataFrame.
+
+        Converts cached contract details from self.contract_details to a pandas DataFrame
+        indexed by symbol.
+
+        Returns:
+            DataFrame indexed by symbol with contract detail columns including contract
+            objects, symbol, and conId. Returns empty DataFrame with 'symbol' index if
+            no contract details have been looked up.
+
+        Note:
+            - Only includes contracts that have been looked up via lookup_cds() or
+              lookup_cds_async()
+            - Symbol and conId columns are extracted from contract objects
+            - Contract objects are included in 'contract' column
+        """
         if len(self.contract_details) > 0:
             cds_df = util.df([x[0] for x in self.contract_details.values()])
 
@@ -577,6 +1098,38 @@ class IBMarketData:
             use_rth: bool = True,
             realtime: bool = False
     ) -> List[int]:
+        """Subscribe to streaming bar data with automatic IB API parameter calculation.
+
+        High-level method for subscribing to bar data using period/interval notation.
+        Automatically converts chronos-lab period and interval strings to IB API parameters
+        (duration, barsize) and handles contract qualification.
+
+        Args:
+            symbols: List of symbol strings to subscribe to. Mutually exclusive with contracts.
+                If provided, contracts are created and qualified automatically.
+            contracts: List of ib_async Contract objects to subscribe to. Mutually exclusive
+                with symbols.
+            period: Chronos-lab period string (e.g., '1d', '7d', '1mo', '1y'). Used to
+                calculate IB duration parameter via _period() utility.
+            interval: Chronos-lab interval string (e.g., '1m', '5m', '1h', '1d'). Mapped to
+                IB barsize via map_interval_to_barsize().
+            what_to_show: IB data type string. Defaults to 'TRADES'. Options: 'TRADES',
+                'MIDPOINT', 'BID', 'ASK', 'BID_ASK', 'ADJUSTED_LAST', etc.
+            use_rth: Use Regular Trading Hours only. Defaults to True. Set False for
+                extended hours.
+            realtime: If False (default), uses historical bars with keepUpToDate=True. If True,
+                uses real-time 5-second bars via reqRealTimeBars (ignores interval parameter).
+
+        Returns:
+            List of contract IDs (integers) successfully subscribed. Empty list on failure.
+
+        Note:
+            - Automatically calculates IB API parameters from period and interval
+            - Logs warning if IB API constraints require overfetching data
+            - Creates and qualifies contracts if symbols provided
+            - Use get_bars() to retrieve subscribed bar data
+            - Use unsub_bars() to cancel subscriptions
+        """
         if symbols is None and contracts is None:
             logger.error("Either symbols or contracts must be provided")
             return []
@@ -641,6 +1194,40 @@ class IBMarketData:
             use_rth: bool = True,
             realtime: bool = False
     ) -> List[int]:
+        """Asynchronously subscribe to streaming bar data with automatic parameter calculation.
+
+        High-level async method for subscribing to bar data using period/interval notation.
+        Automatically converts chronos-lab period and interval strings to IB API parameters
+        and handles contract qualification asynchronously with rate limiting.
+
+        Args:
+            symbols: List of symbol strings to subscribe to. Mutually exclusive with contracts.
+                If provided, contracts are created and qualified asynchronously.
+            contracts: List of ib_async Contract objects to subscribe to. Mutually exclusive
+                with symbols.
+            period: Chronos-lab period string (e.g., '1d', '7d', '1mo', '1y'). Used to
+                calculate IB duration parameter via _period() utility.
+            interval: Chronos-lab interval string (e.g., '1m', '5m', '1h', '1d'). Mapped to
+                IB barsize via map_interval_to_barsize().
+            what_to_show: IB data type string. Defaults to 'TRADES'. Options: 'TRADES',
+                'MIDPOINT', 'BID', 'ASK', 'BID_ASK', 'ADJUSTED_LAST', etc.
+            use_rth: Use Regular Trading Hours only. Defaults to True. Set False for
+                extended hours.
+            realtime: If False (default), uses historical bars with keepUpToDate=True. If True,
+                uses real-time 5-second bars via reqRealTimeBars (ignores interval parameter).
+
+        Returns:
+            List of contract IDs (integers) successfully subscribed. Empty list on failure.
+            Only includes contracts with successful subscriptions.
+
+        Note:
+            - Uses asyncio.TaskGroup for concurrent subscriptions
+            - Concurrency controlled by IB_HISTORICAL_DATA_CONCURRENCY setting
+            - Automatically calculates IB API parameters from period and interval
+            - Logs warning if IB API constraints require overfetching data
+            - Creates and qualifies contracts asynchronously if symbols provided
+            - Logs progress: contracts requested and successfully subscribed
+        """
         if symbols is None and contracts is None:
             logger.error("Either symbols or contracts must be provided")
             return []
@@ -696,6 +1283,25 @@ class IBMarketData:
             return []
 
     def init(self, ib: Optional[IB] = None):
+        """Initialize or verify IB connection for the singleton instance.
+
+        Ensures the singleton has an active connection. If an IB instance is provided,
+        uses it. Otherwise, attempts to connect if not already connected.
+
+        Args:
+            ib: Optional ib_async IB instance to use. If provided, sets self.conn to this
+                instance. If None and not connected, attempts to connect using default
+                settings.
+
+        Returns:
+            Self (IBMarketData instance) if connection successful or already established,
+            None if connection fails.
+
+        Note:
+            - Used internally by get_ib() helper function
+            - If ib parameter provided, assumes it's already connected
+            - If not connected and no ib provided, calls self.connect()
+        """
         if not self._connected:
             if isinstance(ib, IB):
                 self.conn = ib
@@ -708,6 +1314,36 @@ class IBMarketData:
         return self
 
     def _prepare_subscription_params(self, period: str, interval: str):
+        """Convert chronos-lab period and interval to IB API parameters.
+
+        Internal method that translates chronos-lab's period/interval notation to IB API's
+        duration/barsize format using utility functions. Logs warnings if IB API constraints
+        require overfetching data.
+
+        Args:
+            period: Chronos-lab period string (e.g., '1d', '7d', '1mo', '1y').
+            interval: Chronos-lab interval string (e.g., '1m', '5m', '1h', '1d').
+
+        Returns:
+            Tuple of (barsize, ib_params):
+                - barsize: IB bar size string (e.g., '1 min', '5 mins', '1 hour', '1 day')
+                - ib_params: Dictionary with keys from calculate_ib_params():
+                    - 'duration_str': IB duration string (e.g., '1 D', '2 W', '1 Y')
+                    - 'end_datetime': End datetime for request
+                    - 'effective_start': Actual start after IB API rounding
+                    - 'will_overfetch': Boolean indicating if overfetch required
+                    - 'overfetch_days': Number of extra days being fetched
+
+        Raises:
+            ValueError: If interval is unsupported or period exceeds IB API limits for
+                the given barsize.
+
+        Note:
+            - Uses map_interval_to_barsize() for interval conversion
+            - Uses _period() utility to parse period string
+            - Uses calculate_ib_params() to calculate IB duration parameters
+            - Logs warning if will_overfetch is True
+        """
         from chronos_lab._utils import _period
 
         barsize = map_interval_to_barsize(interval)
@@ -725,11 +1361,48 @@ class IBMarketData:
 
 
 def get_ib(ib: Optional[IB] = None) -> IBMarketData:
+    """Get or initialize the IBMarketData singleton instance with optional IB connection.
+
+    Convenience function for obtaining the IBMarketData singleton and ensuring it has
+    an active connection. Preferred way to access IBMarketData in application code.
+
+    Args:
+        ib: Optional ib_async IB instance to use. If provided, the singleton uses this
+            connection. If None, attempts to connect using default settings if not already
+            connected.
+
+    Returns:
+        IBMarketData singleton instance with active connection, or None if connection fails.
+
+    Note:
+        - Internally calls IBMarketData.get_instance().init(ib)
+        - Safe to call multiple times; returns the same singleton instance
+        - Connection parameters from ~/.chronos_lab/.env used if ib not provided
+    """
     ibmd = IBMarketData.get_instance()
     return ibmd.init(ib=ib)
 
 
 def hist_to_ohlcv(hist_data):
+    """Convert historical data DataFrame to OHLCV format.
+
+    Transforms historical data from IB format (indexed by contract, datatype, date) to
+    chronos-lab OHLCV format (indexed by date, symbol).
+
+    Args:
+        hist_data: DataFrame from get_hist_data() or get_hist_data_async() with MultiIndex
+            (contract, datatype, date) and columns ['open', 'high', 'low', 'close', 'volume'].
+
+    Returns:
+        DataFrame with MultiIndex (date, symbol) and columns ['open', 'high', 'low', 'close',
+        'volume', 'conId']. Returns empty DataFrame with correct structure if input is empty.
+
+    Note:
+        - Extracts symbol from contract objects in index
+        - Extracts conId from contract objects
+        - Reorders index to (date, symbol) for chronos-lab conventions
+        - Compatible with ohlcv_to_arcticdb() for storage
+    """
     index_cols = ['date', 'symbol']
     value_cols = ['open', 'high', 'low', 'close', 'volume', 'conId']
 
@@ -745,6 +1418,31 @@ def hist_to_ohlcv(hist_data):
 
 
 def map_interval_to_barsize(interval: str) -> str:
+    """Convert chronos-lab interval string to IB API bar size string.
+
+    Maps human-readable interval notation to Interactive Brokers API bar size format.
+
+    Args:
+        interval: Chronos-lab interval string. Supported values:
+            - Seconds: '1s', '5s', '10s', '15s', '30s'
+            - Minutes: '1m', '2m', '3m', '5m', '10m', '15m', '20m', '30m'
+            - Hours: '1h', '2h', '3h', '4h', '8h'
+            - Days: '1d'
+            - Weeks: '1w', '1wk'
+            - Months: '1mo'
+
+    Returns:
+        IB API bar size string (e.g., '1 min', '5 mins', '1 hour', '1 day', '1 week', '1 month').
+
+    Raises:
+        ValueError: If interval is not in the supported list.
+
+    Note:
+        - IB API uses singular 'min' for 1 minute, plural 'mins' for multiple
+        - IB API uses singular 'hour' for 1 hour, plural 'hours' for multiple
+        - IB API uses 'secs' (plural) even for 1 second
+        - Weeks and months use singular form ('1 week', '1 month')
+    """
     interval_mapping = {
         '1s': '1 secs',
         '5s': '5 secs',
