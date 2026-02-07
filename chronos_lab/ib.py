@@ -82,14 +82,14 @@ class IBMarketData:
     bars, and contract lookups. Uses singleton pattern to ensure a single connection instance
     across the application.
 
-    The class maintains internal state for active subscriptions (ticks, bars) and cached
+    The class maintains internal state for active subscriptions (tickers, bars) and cached
     contract details. Supports both synchronous and asynchronous operations with semaphore-
     controlled concurrency for API rate limiting.
 
     Attributes:
         conn: Active IB connection instance from ib_async library. None if not connected.
         _connected: Boolean indicating whether connection is established.
-        ticks: Dictionary mapping contract IDs to real-time tick data objects.
+        tickers: Dictionary mapping contract IDs to real-time tick data objects.
         bars: Nested dictionary containing OHLCV bar data and contract mappings.
             Structure: {'ohlcv': {conId: bars}, 'contract': {conId: contract}}
         contract_details: Dictionary mapping contract IDs to cached contract detail objects.
@@ -97,7 +97,7 @@ class IBMarketData:
             (includes shortcuts, option volume, IV, etc.).
         _ref_data_sem: Asyncio semaphore controlling concurrent reference data requests.
         _historical_data_sem: Asyncio semaphore controlling concurrent historical data requests.
-        _ticks_cols: List of column names for tick data DataFrame output.
+        _tickers_cols: List of column names for tick data DataFrame output.
         _bars_cols: List of column names for bar data DataFrame output.
 
     Note:
@@ -111,8 +111,8 @@ class IBMarketData:
     _instance: Optional["IBMarketData"] = None
     _connected: bool = False
 
-    ticks: Dict[str, Any] = {}
-    _ticks_cols: List = ['time', 'symbol', 'last', 'lastSize', 'bid', 'bidSize',
+    tickers: Dict[str, Any] = {}
+    _tickers_cols: List = ['time', 'symbol', 'last', 'lastSize', 'bid', 'bidSize',
                          'ask', 'askSize', 'open', 'high', 'low', 'close', 'conId', 'marketPrice']
     bars: Dict[str, Any] = {
         'ohlcv': {},
@@ -213,7 +213,7 @@ class IBMarketData:
             Result of IB.disconnect() if connected, None if not connected.
 
         Note:
-            - Cleans up all tick subscriptions via unsub_ticks()
+            - Cleans up all tick subscriptions via unsub_tickers()
             - Cleans up all bar subscriptions via unsub_bars()
             - Resets _connected flag
         """
@@ -221,9 +221,9 @@ class IBMarketData:
             logger.error('There is no active connection to IB gateway')
             return None
         else:
-            if len(self.ticks) > 0:
-                logger.info('Unsubscribing from ticks')
-                self.unsub_ticks()
+            if len(self.tickers) > 0:
+                logger.info('Unsubscribing from tickers')
+                self.unsub_tickers()
             if len(self.bars['ohlcv']) > 0:
                 logger.info('Unsubscribing from bars')
                 self.unsub_bars()
@@ -414,13 +414,13 @@ class IBMarketData:
         indexed_dfs = [df.set_index(['contract', 'datatype', 'date']) for df in valid_dfs]
         return pd.concat(indexed_dfs, sort=False)
 
-    def sub_ticks(self,
+    def sub_tickers(self,
                   contracts,
                   gen_tick_list=''):
         """Subscribe to real-time tick data for specified contracts.
 
         Initiates real-time market data subscriptions for a list of contracts. Automatically
-        qualifies contracts if needed. Stores ticker objects in self.ticks keyed by contract ID.
+        qualifies contracts if needed. Stores ticker objects in self.tickers keyed by contract ID.
 
         Args:
             contracts: List of ib_async Contract objects to subscribe to.
@@ -431,19 +431,19 @@ class IBMarketData:
         Note:
             - Contracts with conId=0 are automatically qualified
             - Skips contracts already subscribed (logs warning)
-            - Ticker objects stored in self.ticks[conId]
-            - Use get_ticks() to retrieve current tick data as DataFrame
-            - Use unsub_ticks() to cancel subscriptions
+            - Ticker objects stored in self.tickers[conId]
+            - Use get_tickers() to retrieve current tick data as DataFrame
+            - Use unsub_tickers() to cancel subscriptions
         """
         for c in contracts:
             if c.conId == 0:
                 self.conn.qualifyContracts(c)
-            if c.conId not in self.ticks.keys():
-                self.ticks[c.conId] = self.conn.reqMktData(c, genericTickList=gen_tick_list)
+            if c.conId not in self.tickers.keys():
+                self.tickers[c.conId] = self.conn.reqMktData(c, genericTickList=gen_tick_list)
             else:
                 logger.warning('Contract is already subscribed to receive ticks: %s', c)
 
-    def unsub_ticks(self,
+    def unsub_tickers(self,
                     contract_ids=None):
         """Unsubscribe from real-time tick data subscriptions.
 
@@ -451,23 +451,23 @@ class IBMarketData:
 
         Args:
             contract_ids: List of contract IDs (integers) to unsubscribe. If None (default),
-                unsubscribes from all active tick subscriptions and clears self.ticks.
+                unsubscribes from all active tick subscriptions and clears self.tickers.
 
         Note:
             - Uses IB.cancelMktData() to cancel subscriptions
-            - Removes unsubscribed contracts from self.ticks dictionary
+            - Removes unsubscribed contracts from self.tickers dictionary
             - Safe to call even if no active subscriptions
         """
         if contract_ids:
             for cid in contract_ids:
-                self.conn.cancelMktData(self.ticks[cid].contract)
-                del self.ticks[cid]
+                self.conn.cancelMktData(self.tickers[cid].contract)
+                del self.tickers[cid]
         else:
-            for cid in self.ticks.keys():
-                self.conn.cancelMktData(self.ticks[cid].contract)
-            self.ticks = {}
+            for cid in self.tickers.keys():
+                self.conn.cancelMktData(self.tickers[cid].contract)
+            self.tickers = {}
 
-    def get_ticks(self, allcols=False):
+    def get_tickers(self, allcols=False):
         """Retrieve current tick data as a DataFrame for all subscribed contracts.
 
         Converts active ticker objects to a pandas DataFrame with symbol index. Automatically
@@ -475,7 +475,7 @@ class IBMarketData:
 
         Args:
             allcols: If True, returns all available columns (drops only columns with all NaN).
-                If False (default), returns only standard tick columns defined in _ticks_cols:
+                If False (default), returns only standard tick columns defined in _tickers_cols:
                 ['time', 'symbol', 'last', 'lastSize', 'bid', 'bidSize', 'ask', 'askSize',
                 'open', 'high', 'low', 'close', 'conId', 'marketPrice'].
 
@@ -488,22 +488,22 @@ class IBMarketData:
             - marketPrice is calculated via ticker.marketPrice() method
             - Symbol and conId columns added from contract objects
         """
-        if len(self.ticks) > 0:
-            ticks_df = util.df(self.ticks.values())
+        if len(self.tickers) > 0:
+            tickers_df = util.df(self.tickers.values())
 
-            if len(ticks_df.time.dropna()) > 0:
-                ticks_df.time = pd.to_datetime(ticks_df.time).dt.tz_convert('UTC')
+            if len(tickers_df.time.dropna()) > 0:
+                tickers_df.time = pd.to_datetime(tickers_df.time).dt.tz_convert('UTC')
 
-            ticks_df['symbol'] = [x.symbol for x in ticks_df.contract]
-            ticks_df['conId'] = [x.conId for x in ticks_df.contract]
-            ticks_df['marketPrice'] = [self.ticks[x.conId].marketPrice() for x in ticks_df.contract]
+            tickers_df['symbol'] = [x.symbol for x in tickers_df.contract]
+            tickers_df['conId'] = [x.conId for x in tickers_df.contract]
+            tickers_df['marketPrice'] = [self.tickers[x.conId].marketPrice() for x in tickers_df.contract]
 
             if allcols:
-                return ticks_df.dropna(axis=1, how='all').set_index('symbol')
+                return tickers_df.dropna(axis=1, how='all').set_index('symbol')
             else:
-                return ticks_df[self._ticks_cols].set_index('symbol')
+                return tickers_df[self._tickers_cols].set_index('symbol')
         else:
-            return pd.DataFrame(columns=self._ticks_cols).set_index('symbol')
+            return pd.DataFrame(columns=self._tickers_cols).set_index('symbol')
 
     def sub_bars(self,
                  contracts,

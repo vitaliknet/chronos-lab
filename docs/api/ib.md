@@ -61,9 +61,9 @@ The `chronos_lab.ib` module provides the `IBMarketData` singleton class for dire
         - disconnect
         - get_hist_data
         - get_hist_data_async
-        - sub_ticks
-        - unsub_ticks
-        - get_ticks
+        - sub_tickers
+        - unsub_tickers
+        - get_tickers
         - sub_bars
         - sub_bars_async
         - unsub_bars
