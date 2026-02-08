@@ -53,17 +53,23 @@ pip install "chronos-lab[analysis,visualization,aws]"
 
 Available extras include:
 
+- `analysis` – feature engineering, modeling, and calculation graph utilities
+
 - `arcticdb` – time-series storage with ArcticDB
-
-- `yfinance` – Yahoo Finance market data
-
-- `intrinio` – Intrinio market data
 
 - `aws` – AWS integrations (S3, DynamoDB)
 
-- `analysis` – feature engineering and modeling utilities
+- `ib` – Interactive Brokers market data (streaming and historical)
+
+- `intrinio` – Intrinio market data
 
 - `visualization` – matplotlib and mplfinance plotting
+
+- `yfinance` – Yahoo Finance market data
+
+
+
+
 
 
 Extras can be combined as needed to match your environment.
