@@ -1305,6 +1305,17 @@ class IBMarketData:
         if not self._connected:
             if isinstance(ib, IB):
                 self.conn = ib
+
+                logger.info("Inheriting ticker subscriptions from IB instance")
+                for ticker in self.conn.tickers():
+                    self.tickers[ticker.contract.conId] = ticker
+
+                logger.info("Inheriting historical data subscriptions from IB instance")
+                active_bars = self.conn.realtimeBars()
+                for contract_bars in active_bars:
+                    self.bars['contract'][contract_bars.contract.conId] = contract_bars.contract
+                    self.bars['ohlcv'][contract_bars.contract.conId] = contract_bars
+
                 return self
             else:
                 logger.warning("Attempting to get IB but not connected")

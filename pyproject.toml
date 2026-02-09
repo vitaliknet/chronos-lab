@@ -29,6 +29,7 @@ url = "https://pypi.org/simple"
 [dependency-groups]
 dev = [
     "pandas-stubs~=2.3.3",
+    "pytest>=9.0.2",
 ]
 
 [project.optional-dependencies]
