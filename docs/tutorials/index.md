@@ -22,6 +22,26 @@ Learn the fundamentals of chronos-lab through hands-on examples. This tutorial c
 
 ---
 
+## Interactive Brokers Market Data
+
+**Level**: Intermediate
+
+**Topics**: Interactive Brokers integration, real-time data, streaming bars, tick data, contracts
+
+Learn how to access real-time and historical market data from Interactive Brokers. This tutorial covers:
+
+- Connecting to IB Gateway/TWS and managing connections
+- Understanding IB Contracts and handling symbol ambiguity
+- Fetching historical data with sync and async methods
+- Subscribing to streaming bar data for real-time updates
+- Working with real-time tick data (bid/ask spreads)
+- Direct access to IB API functions (market depth, etc.)
+- Storing IB data to ArcticDB
+
+[:material-notebook: Open Tutorial](interactive-brokers.ipynb){ .md-button .md-button--primary }
+
+---
+
 ## OHLCV Anomaly Detection
 
 **Level**: Intermediate
@@ -47,7 +67,11 @@ Learn how to detect anomalies in OHLCV (Open, High, Low, Close, Volume) financia
 Before running these tutorials, install chronos-lab with the required extras:
 
 ```bash
+# For Getting Started and OHLCV Anomaly Detection tutorials
 uv pip install chronos-lab[yfinance,arcticdb,analysis,visualization]
+
+# For Interactive Brokers tutorial (also requires IB Gateway/TWS)
+uv pip install chronos-lab[ib,arcticdb,visualization]
 ```
 
 ### Running Locally

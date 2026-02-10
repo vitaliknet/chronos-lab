@@ -712,71 +712,41 @@ def _prepare_ib_params(
         logger.error("Cannot specify both symbols and contracts")
         return None
 
-    if period is None and start_date is None:
-        logger.error("Either period or start_date must be specified")
-        return None
+    if start_date:
+        start_date = pd.to_datetime(start_date, utc=True) if isinstance(start_date, str) else start_date
 
-    if period and start_date:
-        logger.error("Cannot specify both 'period' and 'start_date'")
-        return None
-
-    if end_date and what_to_show == 'ADJUSTED_LAST':
-        logger.error("Cannot specify end_date with what_to_show='ADJUSTED_LAST', use 'MIDPOINT' or 'TRADES' instead")
-        return None
-
+    if end_date:
+            end_date = pd.to_datetime(end_date, utc=True) if isinstance(end_date, str) else end_date
     try:
         barsize = map_interval_to_barsize(interval)
     except ValueError as e:
         logger.error(str(e))
         return None
 
-    if period:
-        start_dt, end_dt = _period(period,
-                                   as_of=pd.to_datetime(end_date, utc=True) if isinstance(end_date, str) else end_date)
-    else:
-        if start_date:
-            start_dt = pd.to_datetime(start_date, utc=True) if isinstance(start_date, str) else start_date
-        else:
-            logger.error("start_date must be provided when not using period")
-            return None
-
-        if end_date:
-            end_dt = pd.to_datetime(end_date, utc=True) if isinstance(end_date, str) else end_date
-        else:
-            end_dt = pd.Timestamp.now(tz='UTC')
-
     try:
-        ib_params = calculate_ib_params(start_dt, end_dt, barsize)
+        ib_params = calculate_ib_params(start_dt=start_date,
+                                        end_dt=end_date,
+                                        period=period,
+                                        barsize=barsize,
+                                        what_to_show=what_to_show)
     except ValueError as e:
         logger.error(f"Failed to calculate IB API parameters: {str(e)}")
         return None
 
-    duration = ib_params['duration_str']
-    end_datetime = ib_params['end_datetime'] if end_date and what_to_show != 'ADJUSTED_LAST' else ""
-    effective_start = ib_params['effective_start']
-
     if ib_params['will_overfetch']:
         logger.warning(
             f"IB API constraints require fetching {ib_params['overfetch_days']} extra days of data. "
-            f"Requested: {start_dt.date()} to {end_dt.date()}, "
-            f"will fetch from: {effective_start.date()}. "
+            f"Requested from: {ib_params['requested_start'].date()}, "
+            f"will fetch from: {ib_params['effective_start'].date()}. "
             f"Results will be filtered to requested range."
         )
 
-    return {
-        'barsize': barsize,
-        'start_dt': start_dt,
-        'end_dt': end_dt,
-        'duration': duration,
-        'end_datetime': end_datetime,
-        'ib_params': ib_params,
-    }
+    return ib_params
 
 
 def _format_ib_output(
         ohlcv: pd.DataFrame,
         ib_params: Dict,
-        start_dt: pd.Timestamp,
         output_dict: bool
 ) -> Dict[str, pd.DataFrame] | pd.DataFrame:
     """Format OHLCV output with filtering and dict conversion.
@@ -784,7 +754,6 @@ def _format_ib_output(
     Args:
         ohlcv: OHLCV DataFrame with MultiIndex (date, symbol)
         ib_params: IB parameters dict containing 'will_overfetch' flag
-        start_dt: Start datetime for filtering
         output_dict: If True, return dict mapping symbols to DataFrames
 
     Returns:
@@ -793,7 +762,7 @@ def _format_ib_output(
 
     if ib_params['will_overfetch']:
         ohlcv_reset = ohlcv.reset_index()
-        ohlcv_reset = ohlcv_reset[ohlcv_reset['date'] >= start_dt]
+        ohlcv_reset = ohlcv_reset[ohlcv_reset['date'] >= ib_params['requested_start']]
         ohlcv = ohlcv_reset.set_index(['date', 'symbol'])
         logger.info(f"Filtered results to requested date range: {len(ohlcv)} rows")
 
@@ -872,6 +841,8 @@ def ohlcv_from_ib(
     )
     if params is None:
         return None
+    else:
+        logger.info(f"Using IB API parameters: {params}")
 
     try:
         ib = get_ib()
@@ -897,7 +868,7 @@ def ohlcv_from_ib(
     try:
         hist_data = ib.get_hist_data(
             contracts=contracts,
-            duration=params['duration'],
+            duration=params['duration_str'],
             barsize=params['barsize'],
             datatype=what_to_show,
             end_datetime=params['end_datetime'],
@@ -923,7 +894,7 @@ def ohlcv_from_ib(
         logger.error(f"Failed to convert to OHLCV format: {str(e)}")
         return None
 
-    return _format_ib_output(ohlcv, params['ib_params'], params['start_dt'], output_dict)
+    return _format_ib_output(ohlcv, params, output_dict)
 
 
 async def ohlcv_from_ib_async(
@@ -987,6 +958,8 @@ async def ohlcv_from_ib_async(
     )
     if params is None:
         return None
+    else:
+        logger.info(f"Using IB API parameters: {params}")
 
     try:
         ib = get_ib()
@@ -1012,7 +985,7 @@ async def ohlcv_from_ib_async(
     try:
         hist_data = await ib.get_hist_data_async(
             contracts=contracts,
-            duration=params['duration'],
+            duration=params['duration_str'],
             barsize=params['barsize'],
             datatype=what_to_show,
             end_datetime=params['end_datetime'],
@@ -1038,7 +1011,7 @@ async def ohlcv_from_ib_async(
         logger.error(f"Failed to convert to OHLCV format: {str(e)}")
         return None
 
-    return _format_ib_output(ohlcv, params['ib_params'], params['start_dt'], output_dict)
+    return _format_ib_output(ohlcv, params, output_dict)
 
 
 __all__ = [

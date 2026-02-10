@@ -1,52 +1,62 @@
 """Internal utility functions for chronos-lab.
 
-This module provides private helper functions used internally across the library.
-These functions are not part of the public API and may change without notice.
+This module provides private helper functions used internally across the
+library. These functions are not part of the public API and may change
+without notice.
 """
 
 from typing import Optional
+import re
 import pandas as pd
 
+# Strict pattern: integer + single unit character
+_PERIOD_RE = re.compile(r"^(?P<value>\d+)(?P<unit>[SMHdwm y])$".replace(" ", ""))
 
-def _period(period: str, as_of: Optional[pd.Timestamp] = None) -> tuple[pd.Timestamp, pd.Timestamp]:
-    """Convert period string to date range tuple.
+
+def _period(
+        period: str,
+        as_of: Optional[pd.Timestamp] = None,
+) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Convert a period string into a start and end timestamp.
+
+    The period must consist of a positive integer immediately followed by a
+    single unit designator representing seconds, minutes, hours, days, weeks,
+    months, or years. The start timestamp is calculated by subtracting the
+    corresponding offset from the reference time.
 
     Args:
-        period: Period string. Supported formats:
-            - Seconds: '30S', '60S'
-            - Minutes: '5M', '30M'
-            - Hours: '1H', '4H', '24H'
-            - Days: '7d', '14d'
-            - Weeks: '4w'
-            - Months: '3mo' or '3m'
-            - Years: '1y', '2y'
-        as_of: Reference timestamp (defaults to current UTC time)
+        period: Time interval string composed of an integer value and one unit
+            specifier.
+        as_of: Reference timestamp used as the end of the interval. If not
+            provided, the current UTC time is used.
 
     Returns:
-        Tuple of (start_datetime, end_datetime)
+        A tuple of (start_timestamp, end_timestamp).
 
     Raises:
-        ValueError: If period unit is invalid
+        ValueError: If the period format or unit is invalid.
     """
-    end_dt = as_of if as_of is not None else pd.Timestamp.now(tz='UTC')
+    end_dt = as_of if as_of is not None else pd.Timestamp.now(tz="UTC")
 
-    value = int(period[:-1]) if period[-1].isalpha() else int(period[:-2])
-    unit = period[-1] if period[-1].isalpha() else period[-2:]
+    match = _PERIOD_RE.match(period)
+    if not match:
+        raise ValueError(
+            "Invalid period format. Expected '<int><unit>' with unit in "
+            "{S, M, H, d, w, m, y}."
+        )
+
+    value = int(match.group("value"))
+    unit = match.group("unit")
 
     offset_map = {
-        'H': pd.DateOffset(hours=value),
-        'M': pd.DateOffset(minutes=value),
-        'S': pd.DateOffset(seconds=value),
-        'd': pd.DateOffset(days=value),
-        'w': pd.DateOffset(weeks=value),
-        'mo': pd.DateOffset(months=value),
-        'm': pd.DateOffset(months=value),
-        'y': pd.DateOffset(years=value)
+        "S": pd.DateOffset(seconds=value),
+        "M": pd.DateOffset(minutes=value),
+        "H": pd.DateOffset(hours=value),
+        "d": pd.DateOffset(days=value),
+        "w": pd.DateOffset(weeks=value),
+        "m": pd.DateOffset(months=value),
+        "y": pd.DateOffset(years=value),
     }
 
-    if unit not in offset_map:
-        raise ValueError(f"Invalid period unit: {unit}. Use 'H', 'M', 'S', d', 'w', 'mo'/'m', or 'y'")
-
     start_dt = end_dt - offset_map[unit]
-    return (start_dt, end_dt)
-
+    return start_dt, end_dt

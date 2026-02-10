@@ -113,7 +113,7 @@ class IBMarketData:
 
     tickers: Dict[str, Any] = {}
     _tickers_cols: List = ['time', 'symbol', 'last', 'lastSize', 'bid', 'bidSize',
-                         'ask', 'askSize', 'open', 'high', 'low', 'close', 'conId', 'marketPrice']
+                           'ask', 'askSize', 'open', 'high', 'low', 'close', 'conId', 'marketPrice']
     bars: Dict[str, Any] = {
         'ohlcv': {},
         'contract': {}
@@ -415,8 +415,8 @@ class IBMarketData:
         return pd.concat(indexed_dfs, sort=False)
 
     def sub_tickers(self,
-                  contracts,
-                  gen_tick_list=''):
+                    contracts,
+                    gen_tick_list=''):
         """Subscribe to real-time tick data for specified contracts.
 
         Initiates real-time market data subscriptions for a list of contracts. Automatically
@@ -444,7 +444,7 @@ class IBMarketData:
                 logger.warning('Contract is already subscribed to receive ticks: %s', c)
 
     def unsub_tickers(self,
-                    contract_ids=None):
+                      contract_ids=None):
         """Unsubscribe from real-time tick data subscriptions.
 
         Cancels market data subscriptions for specified contracts or all active subscriptions.
@@ -1286,12 +1286,14 @@ class IBMarketData:
         """Initialize or verify IB connection for the singleton instance.
 
         Ensures the singleton has an active connection. If an IB instance is provided,
-        uses it. Otherwise, attempts to connect if not already connected.
+        uses it and inherits any existing subscriptions. Otherwise, attempts to connect
+        if not already connected.
 
         Args:
             ib: Optional ib_async IB instance to use. If provided, sets self.conn to this
-                instance. If None and not connected, attempts to connect using default
-                settings.
+                instance and inherits all active ticker and bar subscriptions from the
+                provided instance. If None and not connected, attempts to connect using
+                default settings.
 
         Returns:
             Self (IBMarketData instance) if connection successful or already established,
@@ -1299,7 +1301,10 @@ class IBMarketData:
 
         Note:
             - Used internally by get_ib() helper function
-            - If ib parameter provided, assumes it's already connected
+            - If ib parameter provided, assumes it's already connected and automatically
+              inherits all active subscriptions:
+              - Ticker subscriptions: Imported into self.tickers keyed by contract ID
+              - Bar subscriptions: Imported into self.bars['ohlcv'] and self.bars['contract']
             - If not connected and no ib provided, calls self.connect()
         """
         if not self._connected:
@@ -1358,15 +1363,9 @@ class IBMarketData:
         from chronos_lab._utils import _period
 
         barsize = map_interval_to_barsize(interval)
-        start_dt, end_dt = _period(period)
-        ib_params = calculate_ib_params(start_dt, end_dt, barsize)
+        ib_params = calculate_ib_params(period=period,
+                                        barsize=barsize)
 
-        if ib_params['will_overfetch']:
-            logger.warning(
-                f"IB API constraints require fetching {ib_params['overfetch_days']} extra days. "
-                f"Requested: {start_dt.date()} to {end_dt.date()}, "
-                f"will fetch from: {ib_params['effective_start'].date()}"
-            )
 
         return barsize, ib_params
 
@@ -1489,144 +1488,133 @@ def map_interval_to_barsize(interval: str) -> str:
 
 
 def calculate_ib_params(
-        start_dt: pd.Timestamp,
-        end_dt: pd.Timestamp,
+        *,
+        period: Optional[str] = None,
+        start_dt: Optional[pd.Timestamp] = None,
+        end_dt: Optional[pd.Timestamp] = None,
+        what_to_show: str = 'ADJUSTED_LAST',
         barsize: str
 ) -> dict:
-    """Calculate Interactive Brokers API parameters respecting duration-barsize constraints.
+    """Calculate Interactive Brokers historical data request parameters.
 
-    IB API has specific limitations on the duration that can be requested for different bar sizes.
-    This function calculates the optimal duration string and handles cases where over-fetching
-    is necessary to satisfy API constraints.
+    Two mutually exclusive modes are supported:
+
+    Period mode:
+        A Chronos-style period string is mapped directly to an IB duration
+        string. Calendar units (years, months, weeks, days) map directly to
+        IB units. Intraday units (hours, minutes, seconds) are converted to
+        seconds.
+
+    Datetime range mode:
+        A start datetime is provided and an optional end datetime. The duration
+        is derived from the elapsed time. Units are chosen to minimize
+        over-fetching (years for long daily ranges, days for multi-day spans,
+        seconds for intraday).
 
     Args:
-        start_dt: Start datetime (timezone-aware pandas Timestamp)
-        end_dt: End datetime (timezone-aware pandas Timestamp)
-        barsize: IB bar size string (e.g., '1 min', '1 hour', '1 day')
+        period: Chronos-style period string. Mutually exclusive with start_dt.
+        start_dt: Start datetime of the request window.
+        end_dt: End datetime of the request window. Defaults to current UTC time.
+        barsize: IB bar size string.
 
     Returns:
         Dictionary containing:
-            - duration_str: IB API duration string (e.g., "2 Y", "365 D", "3600 S")
-            - end_datetime: End datetime to pass to reqHistoricalData
-            - effective_start: Actual start datetime after rounding to valid duration
-            - will_overfetch: True if fetching more data than requested
-            - overfetch_days: Number of extra days being fetched (0 if no overfetch)
+            - duration_str
+            - end_datetime
+            - effective_start
+            - will_overfetch
+            - overfetch_days
 
     Raises:
-        ValueError: If the requested period is invalid or exceeds API limits
-
+        ValueError: If arguments are invalid or incompatible.
     """
-    from dateutil.relativedelta import relativedelta
     import math
+    import re
+    from dateutil.relativedelta import relativedelta
 
-    time_diff = end_dt - start_dt
+    if period and start_dt:
+        raise ValueError("Provide either 'period' or 'start_dt', not both.")
+
+    if not period and start_dt is None:
+        raise ValueError("Either 'period' or 'start_dt' must be provided.")
+
+    if end_dt and what_to_show == 'ADJUSTED_LAST':
+        raise ValueError(
+            "Cannot specify end_date with what_to_show='ADJUSTED_LAST', use 'MIDPOINT' or 'TRADES' instead")
+
+    if period:
+        m = re.match(r"^(?P<value>\d+)(?P<unit>[SMHdwm y])$".replace(" ", ""), period)
+        if not m:
+            raise ValueError("Invalid period format. Expected '<int><unit>'.")
+
+        value = int(m.group("value"))
+        unit = m.group("unit")
+
+        if unit == "y":
+            duration_str = f"{value} Y"
+        elif unit == "m":
+            duration_str = f"{value} M"
+        elif unit == "w":
+            duration_str = f"{value} W"
+        elif unit == "d":
+            duration_str = f"{value} D"
+        else:
+            seconds_map = {"H": 3600, "M": 60, "S": 1}
+            seconds = value * seconds_map[unit]
+            duration_str = f"{seconds} S"
+        return {
+            "duration_str": duration_str,
+            "end_datetime": end_dt if end_dt and what_to_show != 'ADJUSTED_LAST' else "",
+            "requested_start": None,
+            "effective_start": None,
+            "will_overfetch": False,
+            "overfetch_days": 0,
+            "barsize": barsize
+        }
+
+    if end_dt:
+        effective_end = pd.to_datetime(end_dt, utc=True) if isinstance(end_dt, str) else end_dt
+    else:
+        effective_end = pd.Timestamp.now(tz='UTC')
+
+    time_diff = effective_end - start_dt
     total_seconds = time_diff.total_seconds()
 
     if total_seconds <= 0:
         raise ValueError("end_dt must be after start_dt")
 
-    # Define barsize categories and their maximum allowed durations (in seconds)
-    # Based on IB API historical data limitations
-    barsize_limits = {
-        # Bars 30 seconds or less: max 30 minutes
-        '1 secs': 1800,
-        '5 secs': 1800,
-        '10 secs': 1800,
-        '15 secs': 1800,
-        '30 secs': 1800,
-        # Bars 1 minute to 30 minutes: max ~30 days
-        '1 min': 2592000,  # 30 days
-        '2 mins': 2592000,
-        '3 mins': 2592000,
-        '5 mins': 2592000,
-        '10 mins': 2592000,
-        '15 mins': 2592000,
-        '20 mins': 2592000,
-        '30 mins': 2592000,
-        # Bars 1 hour to 8 hours: max ~30 days
-        '1 hour': 2592000,  # 30 days
-        '2 hours': 2592000,
-        '3 hours': 2592000,
-        '4 hours': 2592000,
-        '8 hours': 2592000,
-        # Daily, weekly, monthly bars: max ~1 year
-        '1 day': 31536000,  # 365 days
-        '1 week': 31536000,
-        '1 month': 31536000,
-    }
-
-    max_duration = barsize_limits.get(barsize)
-    if max_duration is None:
-        raise ValueError(f"Unknown barsize '{barsize}' for IB API constraints")
-
-    # Check if requested period exceeds the maximum for this barsize
-    if total_seconds > max_duration:
-        # For daily/weekly/monthly bars, we can use year units
-        if barsize in ['1 day', '1 week', '1 month']:
-            # Calculate how many years needed
-            delta = relativedelta(end_dt, start_dt)
-            years_needed = math.ceil(delta.years + (delta.months > 0 or delta.days > 0))
-
-            duration_str = f"{years_needed} Y"
-            effective_start = end_dt - pd.DateOffset(years=years_needed)
-
-            overfetch_seconds = (effective_start - start_dt).total_seconds()
-            overfetch_days = abs(int(overfetch_seconds / 86400))
-
-            if overfetch_days > 0:
-                will_overfetch = True
-            else:
-                will_overfetch = False
-
-            return {
-                'duration_str': duration_str,
-                'end_datetime': end_dt,
-                'effective_start': effective_start,
-                'will_overfetch': will_overfetch,
-                'overfetch_days': overfetch_days
-            }
-        else:
-            # For intraday bars, exceeding the limit is an error
-            max_days = max_duration / 86400
-            requested_days = total_seconds / 86400
-            raise ValueError(
-                f"Requested period of {requested_days:.1f} days with barsize '{barsize}' "
-                f"exceeds IB API maximum of {max_days:.1f} days. "
-                f"Consider using a larger bar size or shorter time period."
-            )
-
-    # Determine optimal duration string based on time span
-    # Prefer most granular unit that accurately represents the period
-
     days = total_seconds / 86400
 
-    # For daily/weekly/monthly bars and periods close to a year, use year unit
-    if barsize in ['1 day', '1 week', '1 month'] and days >= 360:
-        duration_str = "1 Y"
-        effective_start = end_dt - pd.DateOffset(years=1)
-        will_overfetch = (effective_start < start_dt)
-        overfetch_days = int((start_dt - effective_start).total_seconds() / 86400) if will_overfetch else 0
+    if barsize in ['1 day', '1 week', '1 month'] and days >= 365:
+        delta = relativedelta(effective_end, start_dt)
+        years_needed = math.ceil(delta.years + (delta.months > 0 or delta.days > 0))
 
-    # For periods >= 1 day, use days
+        duration_str = f"{years_needed} Y"
+        effective_start = effective_end - pd.DateOffset(years=years_needed)
+
+        overfetch_days = max(0, (start_dt - effective_start).days)
+        will_overfetch = overfetch_days > 0
+
     elif total_seconds >= 86400:
         days_int = int(math.ceil(days))
         duration_str = f"{days_int} D"
-        effective_start = end_dt - pd.DateOffset(days=days_int)
+        effective_start = effective_end - pd.DateOffset(days=days_int)
         will_overfetch = False
         overfetch_days = 0
 
-    # For periods < 1 day, use seconds
     else:
         seconds_int = int(math.ceil(total_seconds))
         duration_str = f"{seconds_int} S"
-        effective_start = end_dt - pd.DateOffset(seconds=seconds_int)
+        effective_start = effective_end - pd.DateOffset(seconds=seconds_int)
         will_overfetch = False
         overfetch_days = 0
 
     return {
-        'duration_str': duration_str,
-        'end_datetime': end_dt,
-        'effective_start': effective_start,
-        'will_overfetch': will_overfetch,
-        'overfetch_days': overfetch_days
+        "duration_str": duration_str,
+        "end_datetime": end_dt if end_dt and what_to_show != 'ADJUSTED_LAST' else "",
+        "requested_start": start_dt,
+        "effective_start": effective_start,
+        "will_overfetch": will_overfetch,
+        "overfetch_days": overfetch_days,
+        "barsize": barsize
     }
