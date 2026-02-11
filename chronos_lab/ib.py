@@ -297,7 +297,7 @@ class IBMarketData:
         if not hist_data:
             logger.warning('No valid historical data returned for any contract')
             return pd.DataFrame()
-        return pd.concat(hist_data, sort=False)
+        return pd.concat(hist_data)
 
     async def get_hist_data_single(self,
                                    contract,
@@ -1093,6 +1093,7 @@ class IBMarketData:
             symbols: Optional[List[str]] = None,
             contracts: Optional[List] = None,
             period: str = '1d',
+            start_date: Optional[str | datetime | date] = None,
             interval: str = '5m',
             what_to_show: str = 'TRADES',
             use_rth: bool = True,
@@ -1102,7 +1103,9 @@ class IBMarketData:
 
         High-level method for subscribing to bar data using period/interval notation.
         Automatically converts chronos-lab period and interval strings to IB API parameters
-        (duration, barsize) and handles contract qualification.
+        (duration, barsize) and handles contract qualification. Supports two modes for
+        specifying the data window: period-based (relative lookback) or datetime-based
+        (absolute start date).
 
         Args:
             symbols: List of symbol strings to subscribe to. Mutually exclusive with contracts.
@@ -1110,7 +1113,11 @@ class IBMarketData:
             contracts: List of ib_async Contract objects to subscribe to. Mutually exclusive
                 with symbols.
             period: Chronos-lab period string (e.g., '1d', '7d', '1mo', '1y'). Used to
-                calculate IB duration parameter via _period() utility.
+                calculate IB duration parameter as a relative lookback from now. Mutually
+                exclusive with start_date.
+            start_date: Absolute start datetime for the data window. Accepts string, datetime,
+                or date objects. Converted to UTC. If provided, the duration is calculated from
+                this date to now. Mutually exclusive with period.
             interval: Chronos-lab interval string (e.g., '1m', '5m', '1h', '1d'). Mapped to
                 IB barsize via map_interval_to_barsize().
             what_to_show: IB data type string. Defaults to 'TRADES'. Options: 'TRADES',
@@ -1124,7 +1131,10 @@ class IBMarketData:
             List of contract IDs (integers) successfully subscribed. Empty list on failure.
 
         Note:
-            - Automatically calculates IB API parameters from period and interval
+            - Automatically calculates IB API parameters using calculate_ib_params()
+            - Either period OR start_date must be provided (not both)
+            - If neither period nor start_date provided, period defaults to '1d'
+            - Logs calculated IB API parameters for transparency
             - Logs warning if IB API constraints require overfetching data
             - Creates and qualifies contracts if symbols provided
             - Use get_bars() to retrieve subscribed bar data
@@ -1139,10 +1149,17 @@ class IBMarketData:
             return []
 
         try:
-            barsize, ib_params = self._prepare_subscription_params(period, interval)
+            barsize = map_interval_to_barsize(interval)
+            ib_params = calculate_ib_params(period=period,
+                                            start_dt=start_date,
+                                            what_to_show=what_to_show,
+                                            barsize=barsize
+                                            )
         except ValueError as e:
             logger.error(f"Failed to calculate IB parameters: {str(e)}")
             return []
+
+        logger.info(f"Using IB API parameters: {ib_params}")
 
         if symbols is not None:
             try:
@@ -1160,8 +1177,8 @@ class IBMarketData:
                     contracts=contracts,
                     endDateTime='',
                     durationStr=ib_params['duration_str'],
-                    barSizeSetting=barsize,
-                    whatToShow=what_to_show,
+                    barSizeSetting=ib_params['barsize'],
+                    whatToShow=ib_params['what_to_show'],
                     useRTH=use_rth,
                     keepUpToDate=True,
                     formatDate=2,
@@ -1189,6 +1206,7 @@ class IBMarketData:
             symbols: Optional[List[str]] = None,
             contracts: Optional[List] = None,
             period: str = '1d',
+            start_date: Optional[str | datetime | date] = None,
             interval: str = '5m',
             what_to_show: str = 'TRADES',
             use_rth: bool = True,
@@ -1198,7 +1216,9 @@ class IBMarketData:
 
         High-level async method for subscribing to bar data using period/interval notation.
         Automatically converts chronos-lab period and interval strings to IB API parameters
-        and handles contract qualification asynchronously with rate limiting.
+        and handles contract qualification asynchronously with rate limiting. Supports two
+        modes for specifying the data window: period-based (relative lookback) or datetime-
+        based (absolute start date).
 
         Args:
             symbols: List of symbol strings to subscribe to. Mutually exclusive with contracts.
@@ -1206,7 +1226,11 @@ class IBMarketData:
             contracts: List of ib_async Contract objects to subscribe to. Mutually exclusive
                 with symbols.
             period: Chronos-lab period string (e.g., '1d', '7d', '1mo', '1y'). Used to
-                calculate IB duration parameter via _period() utility.
+                calculate IB duration parameter as a relative lookback from now. Mutually
+                exclusive with start_date.
+            start_date: Absolute start datetime for the data window. Accepts string, datetime,
+                or date objects. Converted to UTC. If provided, the duration is calculated from
+                this date to now. Mutually exclusive with period.
             interval: Chronos-lab interval string (e.g., '1m', '5m', '1h', '1d'). Mapped to
                 IB barsize via map_interval_to_barsize().
             what_to_show: IB data type string. Defaults to 'TRADES'. Options: 'TRADES',
@@ -1223,7 +1247,10 @@ class IBMarketData:
         Note:
             - Uses asyncio.TaskGroup for concurrent subscriptions
             - Concurrency controlled by IB_HISTORICAL_DATA_CONCURRENCY setting
-            - Automatically calculates IB API parameters from period and interval
+            - Automatically calculates IB API parameters using calculate_ib_params()
+            - Either period OR start_date must be provided (not both)
+            - If neither period nor start_date provided, period defaults to '1d'
+            - Logs calculated IB API parameters for transparency
             - Logs warning if IB API constraints require overfetching data
             - Creates and qualifies contracts asynchronously if symbols provided
             - Logs progress: contracts requested and successfully subscribed
@@ -1237,10 +1264,17 @@ class IBMarketData:
             return []
 
         try:
-            barsize, ib_params = self._prepare_subscription_params(period, interval)
+            barsize = map_interval_to_barsize(interval)
+            ib_params = calculate_ib_params(period=period,
+                                            start_dt=start_date,
+                                            what_to_show=what_to_show,
+                                            barsize=barsize
+                                            )
         except ValueError as e:
             logger.error(f"Failed to calculate IB parameters: {str(e)}")
             return []
+
+        logger.info(f"Using IB API parameters: {ib_params}")
 
         if symbols is not None:
             try:
@@ -1258,8 +1292,8 @@ class IBMarketData:
                     contracts=contracts,
                     endDateTime='',
                     durationStr=ib_params['duration_str'],
-                    barSizeSetting=barsize,
-                    whatToShow=what_to_show,
+                    barSizeSetting=ib_params['barsize'],
+                    whatToShow=ib_params['what_to_show'],
                     useRTH=use_rth,
                     keepUpToDate=True,
                     formatDate=2,
@@ -1328,46 +1362,6 @@ class IBMarketData:
                     logger.error("Failed to connect to IB")
                     return None
         return self
-
-    def _prepare_subscription_params(self, period: str, interval: str):
-        """Convert chronos-lab period and interval to IB API parameters.
-
-        Internal method that translates chronos-lab's period/interval notation to IB API's
-        duration/barsize format using utility functions. Logs warnings if IB API constraints
-        require overfetching data.
-
-        Args:
-            period: Chronos-lab period string (e.g., '1d', '7d', '1mo', '1y').
-            interval: Chronos-lab interval string (e.g., '1m', '5m', '1h', '1d').
-
-        Returns:
-            Tuple of (barsize, ib_params):
-                - barsize: IB bar size string (e.g., '1 min', '5 mins', '1 hour', '1 day')
-                - ib_params: Dictionary with keys from calculate_ib_params():
-                    - 'duration_str': IB duration string (e.g., '1 D', '2 W', '1 Y')
-                    - 'end_datetime': End datetime for request
-                    - 'effective_start': Actual start after IB API rounding
-                    - 'will_overfetch': Boolean indicating if overfetch required
-                    - 'overfetch_days': Number of extra days being fetched
-
-        Raises:
-            ValueError: If interval is unsupported or period exceeds IB API limits for
-                the given barsize.
-
-        Note:
-            - Uses map_interval_to_barsize() for interval conversion
-            - Uses _period() utility to parse period string
-            - Uses calculate_ib_params() to calculate IB duration parameters
-            - Logs warning if will_overfetch is True
-        """
-        from chronos_lab._utils import _period
-
-        barsize = map_interval_to_barsize(interval)
-        ib_params = calculate_ib_params(period=period,
-                                        barsize=barsize)
-
-
-        return barsize, ib_params
 
 
 def get_ib(ib: Optional[IB] = None) -> IBMarketData:
@@ -1490,8 +1484,8 @@ def map_interval_to_barsize(interval: str) -> str:
 def calculate_ib_params(
         *,
         period: Optional[str] = None,
-        start_dt: Optional[pd.Timestamp] = None,
-        end_dt: Optional[pd.Timestamp] = None,
+        start_dt: Optional[str | datetime | date] = None,
+        end_dt: Optional[str | datetime | date] = None,
         what_to_show: str = 'ADJUSTED_LAST',
         barsize: str
 ) -> dict:
@@ -1500,33 +1494,66 @@ def calculate_ib_params(
     Two mutually exclusive modes are supported:
 
     Period mode:
-        A Chronos-style period string is mapped directly to an IB duration
-        string. Calendar units (years, months, weeks, days) map directly to
-        IB units. Intraday units (hours, minutes, seconds) are converted to
-        seconds.
+        A chronos-lab style period string (e.g., '1d', '7d', '1mo', '1y') is mapped
+        directly to an IB duration string. Calendar units (years, months, weeks,
+        days) map directly to IB units. Intraday units (hours, minutes, seconds)
+        are converted to seconds.
 
     Datetime range mode:
         A start datetime is provided and an optional end datetime. The duration
-        is derived from the elapsed time. Units are chosen to minimize
-        over-fetching (years for long daily ranges, days for multi-day spans,
-        seconds for intraday).
+        is derived from the elapsed time. Units are chosen to minimize over-
+        fetching (years for long daily ranges, days for multi-day spans, seconds
+        for intraday). For daily+ barsizes spanning >= 365 days, uses year-based
+        duration which may cause overfetching if the range doesn't align to year
+        boundaries.
 
     Args:
-        period: Chronos-style period string. Mutually exclusive with start_dt.
-        start_dt: Start datetime of the request window.
-        end_dt: End datetime of the request window. Defaults to current UTC time.
-        barsize: IB bar size string.
+        period: chronos-lab style period string (e.g., '1d', '7d', '1mo', '1y').
+            Mutually exclusive with start_dt. Supported units: 'S' (seconds),
+            'M' (minutes), 'H' (hours), 'd' (days), 'w' (weeks), 'm' (months),
+            'y' (years).
+        start_dt: Start datetime of the request window. Accepts string, datetime,
+            or date objects. Converted to UTC. Mutually exclusive with period.
+        end_dt: End datetime of the request window. Accepts string, datetime, or
+            date objects. Converted to UTC. Defaults to current UTC time if not
+            provided. Cannot be used with what_to_show='ADJUSTED_LAST'.
+        what_to_show: IB data type string. Defaults to 'ADJUSTED_LAST'. Cannot
+            specify end_dt with 'ADJUSTED_LAST' - use 'TRADES' or 'MIDPOINT' instead.
+        barsize: IB bar size string (e.g., '1 min', '5 mins', '1 hour', '1 day').
+            Use map_interval_to_barsize() to convert from chronos-lab interval notation.
 
     Returns:
         Dictionary containing:
-            - duration_str
-            - end_datetime
-            - effective_start
-            - will_overfetch
-            - overfetch_days
+            - duration_str (str): IB duration string (e.g., '1 D', '30 D', '1 Y', '3600 S')
+            - end_datetime (str | pd.Timestamp): Empty string ('') for ADJUSTED_LAST or when
+                end_dt not specified, otherwise the effective end timestamp
+            - requested_start (pd.Timestamp | None): The requested start datetime (None in
+                period mode, timestamp in datetime range mode)
+            - effective_start (pd.Timestamp | None): The actual start that will be fetched
+                (None in period mode, calculated timestamp in datetime range mode)
+            - will_overfetch (bool): True if IB API will fetch data before requested_start
+                due to duration rounding constraints
+            - overfetch_days (int): Number of days of overfetch (0 if no overfetch)
+            - barsize (str): The provided barsize, echoed back for convenience
+            - what_to_show (str): The provided what_to_show, echoed back for convenience
 
     Raises:
-        ValueError: If arguments are invalid or incompatible.
+        ValueError: If both period and start_dt provided, or if neither provided, or if
+            end_dt is before start_dt, or if end_dt specified with what_to_show='ADJUSTED_LAST',
+            or if period format is invalid.
+
+    Examples:
+        Period mode:
+            >>> calculate_ib_params(period='1d', barsize='5 mins', what_to_show='TRADES')
+            {'duration_str': '1 D', 'end_datetime': '', ...}
+
+        Datetime range mode:
+            >>> calculate_ib_params(
+            ...     start_dt='2024-01-01',
+            ...     barsize='1 day',
+            ...     what_to_show='TRADES'
+            ... )
+            {'duration_str': '42 D', 'end_datetime': '', 'requested_start': ..., ...}
     """
     import math
     import re
@@ -1541,6 +1568,14 @@ def calculate_ib_params(
     if end_dt and what_to_show == 'ADJUSTED_LAST':
         raise ValueError(
             "Cannot specify end_date with what_to_show='ADJUSTED_LAST', use 'MIDPOINT' or 'TRADES' instead")
+
+    if start_dt:
+        start_dt = pd.to_datetime(start_dt, utc=True) if isinstance(start_dt, str) else start_dt
+
+    if end_dt:
+        effective_end = pd.to_datetime(end_dt, utc=True) if isinstance(end_dt, str) else end_dt
+    else:
+        effective_end = pd.Timestamp.now(tz='UTC')
 
     if period:
         m = re.match(r"^(?P<value>\d+)(?P<unit>[SMHdwm y])$".replace(" ", ""), period)
@@ -1564,18 +1599,14 @@ def calculate_ib_params(
             duration_str = f"{seconds} S"
         return {
             "duration_str": duration_str,
-            "end_datetime": end_dt if end_dt and what_to_show != 'ADJUSTED_LAST' else "",
+            "end_datetime": effective_end if end_dt and what_to_show != 'ADJUSTED_LAST' else "",
             "requested_start": None,
             "effective_start": None,
             "will_overfetch": False,
             "overfetch_days": 0,
-            "barsize": barsize
+            "barsize": barsize,
+            "what_to_show": what_to_show,
         }
-
-    if end_dt:
-        effective_end = pd.to_datetime(end_dt, utc=True) if isinstance(end_dt, str) else end_dt
-    else:
-        effective_end = pd.Timestamp.now(tz='UTC')
 
     time_diff = effective_end - start_dt
     total_seconds = time_diff.total_seconds()
@@ -1611,10 +1642,11 @@ def calculate_ib_params(
 
     return {
         "duration_str": duration_str,
-        "end_datetime": end_dt if end_dt and what_to_show != 'ADJUSTED_LAST' else "",
+        "end_datetime": effective_end if end_dt and what_to_show != 'ADJUSTED_LAST' else "",
         "requested_start": start_dt,
         "effective_start": effective_start,
         "will_overfetch": will_overfetch,
         "overfetch_days": overfetch_days,
-        "barsize": barsize
+        "barsize": barsize,
+        "what_to_show": what_to_show,
     }
