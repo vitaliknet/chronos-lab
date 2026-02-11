@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-02-11
+
+### Added
+- **Interactive Brokers Integration**: Complete market data support with `IBMarketData` API for real-time ticks and historical bars, plus high-level `ohlcv_from_ib` and `ohlcv_from_ib_async` functions for seamless OHLCV data retrieval
+- `TimeSeriesCollection` class for multi-symbol data orchestration (experimental, undocumented, subject to change)
+
+### Documentation
+- New Interactive Brokers market data tutorial and API reference
+
 ## [0.2.0] – 2026-02-02
 
 ### Added
@@ -138,7 +147,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP server implementation
 - Docker support and environment configuration
 
-[Unreleased]: https://github.com/vitaliknet/chronos-lab/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/vitaliknet/chronos-lab/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/vitaliknet/chronos-lab/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.8...v0.2.0
 [0.1.8]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/vitaliknet/chronos-lab/compare/v0.1.6...v0.1.7

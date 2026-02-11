@@ -4,6 +4,8 @@ chronos-lab is a batteries-included framework for financial time series analysis
 
 It combines ArcticDB for time-series storage, Hamilton DAGs for transparent calculation pipelines, and scikit-learn for modeling—so you can ingest data, analyze thousands of symbols in parallel, and turn results into clear, inspectable insights with minimal glue code.
 
+Connect directly to Interactive Brokers for real-time market data, or pull historical series from Yahoo Finance, Intrinio, and ArcticDB—all through a unified interface that delivers analysis-ready DataFrames.
+
 Prototype interactively in Jupyter notebooks. Scale unchanged pipelines to production with AWS S3 and DynamoDB.
 
 The goal isn’t novelty—it’s leverage. chronos-lab makes the tools you already trust work together, cleanly and predictably.
